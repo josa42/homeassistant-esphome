@@ -1,0 +1,320 @@
+# Xantron PREMIUM-600HE / LUMI LP66-46M control unit over RJ45 UART (3.3 V TTL).
+# Wiring, commissioning and open questions: tv-lift/README.md
+
+esphome:
+  name: tv-lift
+  friendly_name: TV Lift
+
+  includes:
+    - tv-lift/lp66.h
+
+esp8266:
+  board: d1_mini
+
+# Serial logging is off because both hardware UARTs are used for the lift.
+# Logs are available over the API. DEBUG logs every sent and received frame,
+# lower to INFO once the lift works.
+logger:
+  baud_rate: 0
+  level: DEBUG
+
+api:
+  encryption:
+    key: "jktAGGkEu5UCkN//ZMI5Zu25NNBAoF5ObJ1pT5K57d8="
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: TV Lift Fallback Hotspot
+    password: "xbj3s7PXfBId"
+
+captive_portal:
+
+web_server:
+  port: 80
+
+# The ESP8266 has no free full UART, so TX and RX use one hardware UART each:
+# - TX on GPIO2 (D4): UART1, transmit only. Idles high, which matches the
+#   boot strapping of GPIO2.
+# - RX on GPIO13 (D7): UART0 swapped, USB serial stays unused.
+uart:
+  - id: lift_uart_tx
+    tx_pin: GPIO2 # D4 -> RJ45 pin 3 (CU RX)
+    baud_rate: 115200
+    data_bits: 8
+    parity: NONE
+    stop_bits: 1
+
+  - id: lift_uart_rx
+    rx_pin: GPIO13 # D7 <- RJ45 pin 4 (CU TX)
+    baud_rate: 115200
+    data_bits: 8
+    parity: NONE
+    stop_bits: 1
+    rx_buffer_size: 512
+
+globals:
+  # Only unique per session, starts at 0 after every boot to avoid flash writes
+  - id: frame_counter
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: rx_frames_valid
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: rx_frames_invalid
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+script:
+  # The only place that writes to the lift. Queued, so frames never overlap
+  # and always have a pause in between.
+  - id: send_lp66
+    mode: queued
+    max_runs: 10
+    parameters:
+      command: int
+      value: int
+    then:
+      - lambda: |-
+          auto mode = static_cast<lp66::CounterMode>(id(counter_mode).active_index().value_or(0));
+          auto frame = lp66::encode_control(command, value, id(frame_counter), mode);
+          id(lift_uart_tx).write_array(frame.data(), frame.size());
+          ESP_LOGD("lp66", "TX %s (counter %u)", lp66::to_hex(frame).c_str(), id(frame_counter));
+          id(frame_counter)++;
+      - delay: 40ms
+
+  - id: save_position
+    parameters:
+      command: int
+    then:
+      - if:
+          condition:
+            switch.is_on: allow_save
+          then:
+            - script.execute:
+                id: send_lp66
+                command: !lambda return command;
+                value: 1
+            - switch.turn_off: allow_save
+          else:
+            - logger.log:
+                level: WARN
+                tag: lp66
+                format: "Save ignored, turn on 'Speichern freigeben' first"
+
+  - id: allow_save_timeout
+    mode: restart
+    then:
+      - delay: 60s
+      - switch.turn_off: allow_save
+
+interval:
+  - interval: 20ms
+    then:
+      - lambda: |-
+          auto &decoder = lp66::rx_decoder();
+          uint8_t byte;
+          while (id(lift_uart_rx).available() && id(lift_uart_rx).read_byte(&byte)) {
+            switch (decoder.feed(byte)) {
+              case lp66::Decoder::Result::FRAME: {
+                id(rx_frames_valid)++;
+                std::string hex = lp66::to_hex(decoder.raw());
+                if (decoder.message_id() == lp66::ID_SYSTEM_ERROR) {
+                  ESP_LOGW("lp66", "RX system error %s", hex.c_str());
+                  id(last_error_frame).publish_state(hex);
+                } else if (id(last_rx_frame).state != hex) {
+                  // The system data stream may repeat, only log and publish changes
+                  ESP_LOGD("lp66", "RX %s", hex.c_str());
+                  id(last_rx_frame).publish_state(hex);
+                }
+                break;
+              }
+              case lp66::Decoder::Result::INVALID:
+                id(rx_frames_invalid)++;
+                ESP_LOGW("lp66", "RX invalid frame %s", lp66::to_hex(decoder.raw()).c_str());
+                break;
+              default:
+                break;
+            }
+          }
+
+button:
+  # Movement, all one-shot: nothing is sent on boot or reconnect
+  - platform: template
+    name: "Position 1"
+    icon: "mdi:numeric-1-box"
+    on_press:
+      - script.execute:
+          id: send_lp66
+          command: !lambda return lp66::CMD_MEMORY_1;
+          value: 1
+
+  - platform: template
+    name: "Position 2"
+    icon: "mdi:numeric-2-box"
+    on_press:
+      - script.execute:
+          id: send_lp66
+          command: !lambda return lp66::CMD_MEMORY_2;
+          value: 1
+
+  # The Xantron manual only documents two positions, depends on the firmware
+  - platform: template
+    name: "Position 3"
+    icon: "mdi:numeric-3-box"
+    disabled_by_default: true
+    on_press:
+      - script.execute:
+          id: send_lp66
+          command: !lambda return lp66::CMD_MEMORY_3;
+          value: 1
+
+  - platform: template
+    name: "Hoch starten"
+    icon: "mdi:arrow-up-bold"
+    on_press:
+      - script.execute:
+          id: send_lp66
+          command: !lambda return lp66::CMD_UP;
+          value: 1
+
+  - platform: template
+    name: "Runter starten"
+    icon: "mdi:arrow-down-bold"
+    on_press:
+      - script.execute:
+          id: send_lp66
+          command: !lambda return lp66::CMD_DOWN;
+          value: 1
+
+  # No universal stop is documented, so stop both directions. Drops queued
+  # commands first so the stop goes out immediately.
+  - platform: template
+    name: "Stopp"
+    icon: "mdi:stop"
+    on_press:
+      - script.stop: send_lp66
+      - script.execute:
+          id: send_lp66
+          command: !lambda return lp66::CMD_UP;
+          value: 0
+      - script.execute:
+          id: send_lp66
+          command: !lambda return lp66::CMD_DOWN;
+          value: 0
+
+  # Saving overwrites the stored position, only works while allow_save is on
+  - platform: template
+    name: "Aktuelle Höhe als Position 1 speichern"
+    icon: "mdi:content-save"
+    entity_category: config
+    on_press:
+      - script.execute:
+          id: save_position
+          command: !lambda return lp66::CMD_SAVE_1;
+
+  - platform: template
+    name: "Aktuelle Höhe als Position 2 speichern"
+    icon: "mdi:content-save"
+    entity_category: config
+    on_press:
+      - script.execute:
+          id: save_position
+          command: !lambda return lp66::CMD_SAVE_2;
+
+  - platform: template
+    name: "Aktuelle Höhe als Position 3 speichern"
+    icon: "mdi:content-save"
+    entity_category: config
+    disabled_by_default: true
+    on_press:
+      - script.execute:
+          id: save_position
+          command: !lambda return lp66::CMD_SAVE_3;
+
+  - platform: template
+    name: "Framezähler zurücksetzen"
+    icon: "mdi:counter"
+    entity_category: diagnostic
+    on_press:
+      - lambda: id(frame_counter) = 0;
+
+  - platform: safe_mode
+    name: Safe Mode Boot
+
+switch:
+  # Turns itself off after one save or after 60 s
+  - platform: template
+    id: allow_save
+    name: "Speichern freigeben"
+    icon: "mdi:lock-open-variant"
+    entity_category: config
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - script.execute: allow_save_timeout
+    on_turn_off:
+      - script.stop: allow_save_timeout
+
+select:
+  # Byte order of the frame counter is not documented. Options must stay in the
+  # order of lp66::CounterMode.
+  - platform: template
+    id: counter_mode
+    name: "Framezähler-Modus"
+    icon: "mdi:swap-horizontal"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    options:
+      - "High-Byte zuerst"
+      - "Low-Byte zuerst"
+      - "Immer 0000"
+    initial_option: "High-Byte zuerst"
+
+text_sensor:
+  - platform: template
+    id: last_rx_frame
+    name: "Letztes empfangenes Telegramm"
+    icon: "mdi:message-arrow-left"
+    entity_category: diagnostic
+
+  - platform: template
+    id: last_error_frame
+    name: "Letzter Systemfehler"
+    icon: "mdi:alert"
+    entity_category: diagnostic
+
+sensor:
+  - platform: template
+    name: "Framezähler"
+    icon: "mdi:counter"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: return id(frame_counter);
+
+  - platform: template
+    name: "Gültige Telegramme empfangen"
+    icon: "mdi:message-check"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: return id(rx_frames_valid);
+
+  - platform: template
+    name: "Ungültige Telegramme empfangen"
+    icon: "mdi:message-alert"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: return id(rx_frames_invalid);
