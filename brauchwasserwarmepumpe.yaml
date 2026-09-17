@@ -1,0 +1,115 @@
+substitutions:
+  device_name: "brauchwasserwarmepumpe"
+  friendly_name: "Brauchwasserwärmepumpe"
+  channel_1: "SG1 Relais"
+  channel_2: "SG2 Relais"
+
+esp8266:
+  board: esp01_1m
+
+esphome:
+  name: "${device_name}"
+  friendly_name: "${friendly_name}"
+
+  includes:
+    - brauchwasserwarmepumpe/functions.h
+
+# Enable logging
+logger:
+  level: INFO
+
+# Enable Home Assistant API
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: HIGH  # für ESP8266 sind LOW/HIGH vertauscht
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "${friendly_name} Hotspot"
+    password: "0Aht0PfqaXeu"
+
+captive_portal:
+
+web_server:
+  port: 80
+
+time:
+  - platform: sntp
+    id: my_time
+
+api:
+  encryption:
+    key: "a4XjJnXPfBxTlzzMh0BgIUOG8zQMzJRHO3Q+EPoBYW8="
+
+ota:
+  - platform: esphome
+    password: "00ce8b7eb7fa40f5dccd9656e6b5b498"
+
+# I2C configuration for Shelly 2.5
+i2c:
+  sda: GPIO12
+  scl: GPIO14
+
+switch:
+  - platform: gpio
+    name: "${channel_1}"
+    pin: GPIO4
+    id: relay_1
+    restore_mode: RESTORE_DEFAULT_OFF
+    # internal: true # Hidden from HA
+    on_turn_on:
+      lambda: update_sg_ready_select(id(sg_ready_mode), id(relay_1), id(relay_2));
+    on_turn_off:
+      lambda: update_sg_ready_select(id(sg_ready_mode), id(relay_1), id(relay_2));
+
+  - platform: gpio
+    name: "${channel_2}"
+    pin: GPIO15
+    id: relay_2
+    restore_mode: RESTORE_DEFAULT_OFF
+    # internal: true # Hidden from HA
+    on_turn_on:
+      lambda: update_sg_ready_select(id(sg_ready_mode), id(relay_1), id(relay_2));
+    on_turn_off:
+      lambda: update_sg_ready_select(id(sg_ready_mode), id(relay_1), id(relay_2));
+
+# SG Ready Select mit 4 Zuständen
+select:
+  - platform: template
+    name: "SG Ready Betriebszustand"
+    id: sg_ready_mode
+    icon: "mdi:heat-pump"
+    optimistic: true
+    options: # needs to be in sync with consts on functions.h
+      - "1 - Sperrung"
+      - "2 - Normalbetrieb"
+      - "3 - Einschaltempfehlung"
+      - "4 - Aktivierung"
+    initial_option: "2 - Normalbetrieb"
+    
+    on_value:
+      then:
+        - lambda: set_sg_ready_mode_text(x, id(relay_1), id(relay_2));
+
+# Text Sensor für aktuellen Status
+text_sensor:
+  - platform: template
+    name: "SG Ready Status Text"
+    id: sg_ready_status_text
+    icon: "mdi:information"
+    update_interval: 5s
+    lambda: return get_sg_ready_mode_text(id(relay_1), id(relay_2));
+
+number:
+  - platform: template
+    name: "SG Ready Status"
+    id: sg_ready_status
+    icon: "mdi:information"
+    update_interval: 5s
+    min_value: 1
+    max_value: 4
+    step: 1
+    lambda: return get_sg_ready_mode(id(relay_1), id(relay_2));
+    set_action:
+      lambda: set_sg_ready_mode(x, id(relay_1), id(relay_2));

@@ -1,0 +1,192 @@
+esphome:
+  name: dunstabzug
+  friendly_name: Dunstabzug
+  on_boot:
+    priority: -100  # Nach Sensor-Initialisierung
+    then:
+      - script.execute: { id: sync_led }
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+    # type: arduino
+
+web_server:
+  port: 80
+
+# Enable logging
+logger:
+  level: DEBUG
+  logs:
+    sensor: WARN
+    adc: WARN
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "4GsaecXW2klfcOr/galAgpEdLLOFnav5iUnww08zNos="
+
+ota:
+  - platform: esphome
+    password: "158298a007ac05eabf699ebdd7dd8a71"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Dunstabzug Fallback Hotspot"
+    password: "nU4fknvMUP8w"
+
+captive_portal:
+
+globals:
+  - id: syncing_from_sensor
+    type: bool
+    initial_value: 'true'
+
+  - id: last_output_state
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+####################################################################################################
+
+remote_transmitter:
+  pin: GPIO4
+  # RF uses a 100% carrier signal
+  carrier_duty_percent: 100%
+
+####################################################################################################
+# Internal sensors
+
+sensor:
+  - platform: adc
+    pin:
+      number: 34
+    attenuation: 11db
+    update_interval: 1s
+    accuracy_decimals: 1
+    filters:
+      - multiply: 5.0  # Kalibriere später
+    unit_of_measurement: V
+    id: voltage_light
+
+binary_sensor:
+  - platform: template
+    id: led_status
+    lambda: |-
+      return id(voltage_light).state > 1;
+    on_state:
+      then:
+        - script.execute: { id: sync_led }
+
+####################################################################################################
+
+# Script: Sendet RF-Code (mit Parameter)
+
+script:
+  - id: send_up
+    then:
+      - script.execute:
+          id: send_command
+          code: '010101010101'
+      - logger.log:
+          format: "Sent code 'up'"
+      - delay: 100ms
+
+  - id: send_down
+    then:
+      - script.execute:
+          id: send_command
+          code: '010101010110'
+      - logger.log:
+          format: "Sent code 'down'"
+      - delay: 100ms
+
+  - id: send_light
+    then:
+      - script.execute:
+          id: send_command
+          code: '010101010111010001'
+      - logger.log:
+          format: "Sent code 'light'"
+      - delay: 100ms
+
+  - id: send_command
+    parameters:
+      code: string
+    then:
+      - remote_transmitter.transmit_rc_switch_raw:
+          code: !lambda 'return code;'
+          protocol:
+            pulse_length: 320
+            sync: [36, 1]
+            zero: [1, 2]
+            one: [2, 1]
+            inverted: True
+          repeat:
+            times: 2
+            wait_time: 10ms
+  - id: sync_led
+    then:
+      - globals.set:
+          id: syncing_from_sensor
+          value: 'true'
+      - if:
+          condition:
+            binary_sensor.is_on: led_status
+          then:
+            - light.turn_on: light_led
+          else:
+            - light.turn_off: light_led
+      - delay: 500ms
+      - globals.set:
+          id: syncing_from_sensor
+          value: 'false'
+
+####################################################################################################
+# Buttons
+
+button:
+  - platform: template
+    name: Fan Up
+    icon: "mdi:plus"
+    on_press:
+      - script.execute: { id: send_up }
+
+  - platform: template
+    name: Fan Down
+    icon: "mdi:minus"
+    on_press:
+      - script.execute: { id: send_down }
+
+####################################################################################################
+#  Light
+
+light:
+  - platform: binary
+    name: "Licht"
+    id: light_led
+    output: light_output
+    restore_mode: ALWAYS_OFF
+
+output:
+  - platform: template
+    id: light_output
+    type: binary
+    write_action:
+      - if:
+          condition:
+            lambda: 'return !id(syncing_from_sensor) && (state != id(led_status).state);'
+          then:
+            - script.execute: { id: send_light }
+          # condition:
+          #   lambda: |
+          #     return !id(syncing_from_sensor) && state != id(last_output_state);
+          # then:
+          #   - lambda: |
+          #       id(last_output_state) = state;
+          #   - script.execute: { id: send_light }

@@ -1,0 +1,5 @@
+/.esphome/
+/.pioenvs/
+/.piolibdeps/
+/.device-builder*
+/secrets.yaml

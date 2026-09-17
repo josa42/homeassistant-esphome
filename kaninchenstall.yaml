@@ -1,0 +1,77 @@
+esphome:
+  name: kaninchenstall
+  friendly_name: Kaninchenstall
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+web_server:
+  port: 80
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "D5H+5Tb2HL3GLySuFx1u1sHe7FezUCzbqqdEov1rItk="
+
+ota:
+  - platform: esphome
+    password: "ab1c051f0f904f1ece1486539555bdd8"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Kaninchenstall Fallback Hotspot"
+    password: "AzpQ6Ey9utd0"
+
+captive_portal:
+  
+
+switch:
+  - platform: gpio
+    pin: GPIO16
+    id: relay_open
+    restore_mode: ALWAYS_OFF
+  - platform: gpio
+    pin:
+      number: GPIO17
+      inverted: true
+    id: relay_close
+    restore_mode: ALWAYS_OFF
+
+button:
+  - platform: template
+    name: Öffnen
+    # icon: "mdi:plus"
+    on_press:
+      - switch.turn_on: relay_open
+      - delay: 500ms
+      - switch.turn_off: relay_open
+
+  - platform: template
+    name: Schließen
+    # icon: "mdi:plus"
+    on_press:
+      - switch.turn_on: relay_close
+      - delay: 500ms
+      - switch.turn_off: relay_close
+
+cover:
+  - platform: template
+    name: "Klappe"
+    device_class: shutter
+    open_action:
+      - switch.turn_on: relay_open
+      - delay: 500ms
+      - switch.turn_off: relay_open
+    close_action:
+      - switch.turn_on: relay_close
+      - delay: 500ms
+      - switch.turn_off: relay_close

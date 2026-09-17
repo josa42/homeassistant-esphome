@@ -1,0 +1,52 @@
+esphome:
+  name: ble-proxy-1
+  friendly_name: BLE Proxy 1
+  # min_version: 2025.8.0
+  # name_add_mac_suffix: true
+
+esp32:
+  variant: esp32
+  framework:
+    type: esp-idf
+
+logger:
+  level: INFO
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${friendly_name} Hotspot"
+    password: "0Aht0PfqaXeu"
+
+captive_portal:
+
+web_server:
+  port: 80
+
+api:
+  encryption:
+    key: "dMD1XR4pvCpwdVrZxfXd7X3sTN203tjwYl03uEWn8Rc="
+
+ota:
+  - platform: esphome
+    password: "00ce8b7eb7fa40f5dccd9656e6b5b498"
+
+esp32_ble_tracker:
+  scan_parameters:
+    # We currently use the defaults to ensure Bluetooth
+    # can co-exist with WiFi In the future we may be able to
+    # enable the built-in coexistence logic in ESP-IDF
+    active: true
+
+bluetooth_proxy:
+  active: true
+
+button:
+  - platform: safe_mode
+    id: button_safe_mode
+    name: Safe Mode Boot
+
+  - platform: factory_reset
+    id: factory_reset_btn
+    name: Factory reset

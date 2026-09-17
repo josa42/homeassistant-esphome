@@ -1,0 +1,83 @@
+substitutions:
+  device_name: "light_1_shelly"
+
+esphome:
+  name: light-1
+  friendly_name: Telefonlicht
+  area: Wohnzimmer
+
+esp8266:
+  board: esp01_1m
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "AkXruNOLeH4jjQGDVdf7ZOPe1IaLKe5adrwltaaWtAY="
+
+ota:
+  - platform: esphome
+    password: "a0377e4679cc1ab3df7f216cd252684d"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Light-1 Fallback Hotspot"
+    password: "ViV0IQkLld4t"
+
+captive_portal:
+
+
+
+################################################################################
+# Device Specific Config
+
+output:
+  - platform: gpio
+    pin: GPIO4
+    id: relay
+
+light:
+  - platform: binary
+    name: ${device_name}
+    output: relay
+    id: ${device_name}
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO5
+      #mode: INPUT_PULLUP
+      #inverted: True
+    name: ${device_name}
+    on_state:
+      then:
+        - light.toggle: ${device_name}
+    internal: true
+    id: switchid
+
+################################################################################
+# General sensors
+
+# Text sensors with general information.
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: ${device_name} IP
+
+# Sensors with general information.
+sensor:
+  # Uptime sensor.
+  - platform: uptime
+    name: ${device_name} Uptime
+
+  # WiFi Signal sensor.
+  - platform: wifi_signal
+    name: ${device_name} WiFi Signal
+    update_interval: 60s
+    
