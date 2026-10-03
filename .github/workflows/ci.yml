@@ -7,4 +7,4 @@ on:
 
 jobs:
   ci:
-    uses: josa42/gha-workflows/.github/workflows/esphome.yml@main
+    uses: josa42/actions/.github/workflows/shared-esphome.yml@main
