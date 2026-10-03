@@ -32,7 +32,7 @@ wifi:
     password: "AzpQ6Ey9utd0"
 
 captive_portal:
-  
+
 
 switch:
   - platform: gpio

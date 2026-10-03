@@ -34,11 +34,11 @@ ota:
 web_server:
   include_internal: true
   # needs to be false due to a bug: https://github.com/esphome/issues/issues/5188
-  local: false 
+  local: false
   port: 80
 
 # captive_portal:
-    
+
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
@@ -48,13 +48,14 @@ wifi:
     ssid: "Lock Fallback Hotspot"
     password: "ujKe1wceORX7"
   # ...
-  # We only start BLE scan after WiFi connected, see https://github.com/esphome/issues/issues/2941#issuecomment-1842369092
+  # We only start BLE scan after WiFi connected, see
+  # https://github.com/esphome/issues/issues/2941#issuecomment-1842369092
   on_connect:
     - esp32_ble_tracker.start_scan:
-       continuous: true
+        continuous: true
     # Use below to apply saved input parameters
     - eqiva_key_ble.connect:
-        mac_address: !lambda 'return id(mac_address).state;' 
+        mac_address: !lambda 'return id(mac_address).state;'
         user_id: !lambda 'return id(user_id).state;'
         user_key: !lambda 'return id(user_key).state;'
   on_disconnect:
@@ -62,17 +63,17 @@ wifi:
 
 
 esp32_ble_tracker:
-   scan_parameters:
+  scan_parameters:
     window: 300ms
     # We do not start scan initialy, see https://github.com/esphome/issues/issues/2941#issuecomment-1842369092
     continuous: false
 
 # used for discovering the lock and get the mac_address, check logger for it
 eqiva_ble:
-  
-text_sensor: 
+
+text_sensor:
   - platform: eqiva_key_ble
-    mac_address: 
+    mac_address:
       name: "Mac Address"
     lock_status:
       id: lock_status
@@ -104,10 +105,10 @@ button:
     icon: "mdi:content-save"
     on_press:
       - eqiva_key_ble.connect:
-          mac_address: !lambda 'return id(mac_address).state;' 
+          mac_address: !lambda 'return id(mac_address).state;'
           user_id: !lambda 'return id(user_id).state;'
           user_key: !lambda 'return id(user_key).state;'
-  
+
   - platform: template
     id: ble_disconnect
     name: BLE Settings _Disconnect_
@@ -121,7 +122,7 @@ button:
     icon: "mdi:check-underline"
     on_press:
       - eqiva_key_ble.pair:
-          card_key: !lambda 'return id(card_key).state;' 
+          card_key: !lambda 'return id(card_key).state;'
 
   - platform: template
     id: lock_settings
@@ -129,10 +130,10 @@ button:
     icon: "mdi:check-underline"
     on_press:
       - eqiva_key_ble.settings:
-          turn_left: !lambda 'return id(direction).state == "Left";' 
+          turn_left: !lambda 'return id(direction).state == "Left";'
           key_horizontal: !lambda 'return id(position).state == "Horizontal";'
           lock_turns: !lambda 'return atoi(id(turns).state.c_str());'
-          
+
 number:
   - platform: template
     mode: box
@@ -168,26 +169,25 @@ select:
     name: Lock Settings Close Direction
     id: direction
     options:
-     - "Left"
-     - "Right"
+      - "Left"
+      - "Right"
     optimistic: true
   - platform: template
     name: Lock Settings Key Position
     id: position
     options:
-     - "Vertical"
-     - "Horizontal"
+      - "Vertical"
+      - "Horizontal"
     optimistic: true
   - platform: template
     name: Lock Settings Turns
     id: turns
     options:
-     - "1"
-     - "2"
-     - "3"
-     - "4"
+      - "1"
+      - "2"
+      - "3"
+      - "4"
     optimistic: true
-
 
 
 lock:
@@ -202,7 +202,7 @@ lock:
         return {};
       } else if (id(lock_status).state == "UNKNOWN") {
         return LOCK_STATE_JAMMED;
-      } 
+      }
       return LOCK_STATE_LOCKED;
     lock_action:
       - eqiva_key_ble.lock:

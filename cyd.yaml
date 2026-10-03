@@ -59,11 +59,11 @@ wifi:
 globals:
   - id: status_text
     type: std::string
-    restore_value: no
+    restore_value: false
     initial_value: '"Loading..."'
   - id: image_ready
     type: bool
-    restore_value: no
+    restore_value: false
     initial_value: 'false'
 
 font:

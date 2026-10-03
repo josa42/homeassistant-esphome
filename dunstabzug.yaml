@@ -4,7 +4,7 @@ esphome:
   on_boot:
     priority: -100  # Nach Sensor-Initialisierung
     then:
-      - script.execute: { id: sync_led }
+      - script.execute: {id: sync_led}
 
 esp32:
   board: esp32dev
@@ -102,7 +102,7 @@ binary_sensor:
       - delayed_on_off: 500ms
     on_state:
       then:
-        - script.execute: { id: sync_led }
+        - script.execute: {id: sync_led}
 
 ####################################################################################################
 
@@ -147,7 +147,7 @@ script:
             sync: [36, 1]
             zero: [1, 2]
             one: [2, 1]
-            inverted: True
+            inverted: true
           repeat:
             times: 2
             wait_time: 10ms
@@ -170,7 +170,7 @@ script:
             - lambda: |-
                 id(light_attempts) += 1;
                 id(light_expected) = !id(led_status).state;
-            - script.execute: { id: send_light }
+            - script.execute: {id: send_light}
             - script.wait: send_light
             - wait_until:
                 condition:
@@ -189,7 +189,7 @@ script:
           id: light_busy
           value: 'false'
       # Tatsächlichen Zustand übernehmen (auch nach Fehlschlag)
-      - script.execute: { id: sync_led }
+      - script.execute: {id: sync_led}
 
   - id: sync_led
     mode: restart
@@ -226,13 +226,13 @@ button:
     name: Fan Up
     icon: "mdi:plus"
     on_press:
-      - script.execute: { id: send_up }
+      - script.execute: {id: send_up}
 
   - platform: template
     name: Fan Down
     icon: "mdi:minus"
     on_press:
-      - script.execute: { id: send_down }
+      - script.execute: {id: send_down}
 
 ####################################################################################################
 #  Light
@@ -260,4 +260,4 @@ output:
                 condition:
                   lambda: 'return !id(light_busy);'
                 then:
-                  - script.execute: { id: apply_light }
+                  - script.execute: {id: apply_light}

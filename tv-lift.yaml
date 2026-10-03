@@ -43,14 +43,14 @@ web_server:
 # - RX on GPIO13 (D7): UART0 swapped, USB serial stays unused.
 uart:
   - id: lift_uart_tx
-    tx_pin: GPIO2 # D4 -> RJ45 pin 3 (CU RX)
+    tx_pin: GPIO2  # D4 -> RJ45 pin 3 (CU RX)
     baud_rate: 115200
     data_bits: 8
     parity: NONE
     stop_bits: 1
 
   - id: lift_uart_rx
-    rx_pin: GPIO13 # D7 <- RJ45 pin 4 (CU TX)
+    rx_pin: GPIO13  # D7 <- RJ45 pin 4 (CU TX)
     baud_rate: 115200
     data_bits: 8
     parity: NONE
@@ -61,17 +61,17 @@ globals:
   # Only unique per session, starts at 0 after every boot to avoid flash writes
   - id: frame_counter
     type: uint16_t
-    restore_value: no
+    restore_value: false
     initial_value: "0"
 
   - id: rx_frames_valid
     type: uint32_t
-    restore_value: no
+    restore_value: false
     initial_value: "0"
 
   - id: rx_frames_invalid
     type: uint32_t
-    restore_value: no
+    restore_value: false
     initial_value: "0"
 
 script:

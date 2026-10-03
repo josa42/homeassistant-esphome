@@ -11,13 +11,13 @@ esphome:
           value: 'true'
       - logger.log: "Boot complete - on_value ready"
 
-# esp8266: 
+# esp8266:
 #   board: d1_mini
 
-esp32: 
+esp32:
   board: esp32dev
   framework:
-    type: arduino # esp-idf
+    type: arduino  # esp-idf
 
 # esp32:
 #   board: wemos_d1_mini32
@@ -62,7 +62,6 @@ wifi:
 captive_portal:
 
 
-
 #############################################
 
 # Light Entity - mit Toggle-Logik
@@ -78,26 +77,26 @@ captive_portal:
 globals:
   - id: sync_in_progress
     type: bool
-    restore_value: no
+    restore_value: false
     initial_value: 'false'
 
   - id: vent_sync_in_progress
     type: bool
-    restore_value: no
+    restore_value: false
     initial_value: 'false'
 
   - id: select_sync_in_progress
     type: bool
-    restore_value: no
+    restore_value: false
     initial_value: 'false'
 
   - id: boot_complete
     type: bool
-    restore_value: no
+    restore_value: false
     initial_value: 'false'
 
 remote_transmitter:
-  pin: GPIO4 #  -> D2
+  pin: GPIO4  # -> D2
   # RF uses a 100% carrier signal
   carrier_duty_percent: 100%
 
@@ -136,7 +135,7 @@ script:
             sync: [36, 1]
             zero: [1, 2]
             one: [2, 1]
-            inverted: True
+            inverted: true
           repeat:
             times: 2
             wait_time: 10ms
@@ -154,7 +153,7 @@ script:
   #           bool light_state = id(led_light).current_values.is_on();
   #
   #           if (sensor_state != light_state) {
-  #             ESP_LOGD("novy", "Sensor: %s, Light: %s - Syncing to sensor", 
+  #             ESP_LOGD("novy", "Sensor: %s, Light: %s - Syncing to sensor",
   #                      sensor_state ? "ON" : "OFF",
   #                      light_state ? "ON" : "OFF");
   #             auto call = id(led_light).make_call();
@@ -163,7 +162,6 @@ script:
   #           }
   #       - delay: 100ms
   #       - lambda: 'id(sync_in_progress) = false;'
-
 
 
 #############################################
@@ -205,7 +203,7 @@ button:
   #         id: send_command
   #         name: Power
   #         code: '010101010111010011'
-          
+
   # - platform: template
   #   name: Novy
   #   internal: true
@@ -222,13 +220,13 @@ select:
     id: select_level
     options:
       - "0"
-      - "1" 
+      - "1"
       - "2"
       - "3"
       - "4"
     initial_option: "0"
     optimistic: true
-    restore_value: NO
+    restore_value: false
     on_value:
       - if:
           condition:
@@ -262,12 +260,11 @@ select:
                 value: 'false'
 
 
-
 #############################################
 
 sensor:
   - platform: adc
-    pin: GPIO36 # -> VP
+    pin: GPIO36  # -> VP
     id: adc_sensor
     update_interval: 1s
 
@@ -348,36 +345,35 @@ output:
     #       bool target_state = state;
     #       int max_retries = 2;
     #       int retry_count = 0;
-    #       
+    #
     #       ESP_LOGD("novy", "Target state: %s", target_state ? "ON" : "OFF");
-    #       
+    #
     #       // Sende Toggle und warte auf Bestätigung
     #       while (retry_count <= max_retries) {
     #         // Sende Toggle-Befehl
     #         id(send_novy_command).execute("010101010111010001");
-    #         
+    #
     #         // Warte kurz auf physische Reaktion
     #         delay(800);
-    #         
+    #
     #         // Prüfe ob gewünschter State erreicht wurde
     #         bool current_state = id(novy_led_status).state;
-    #         ESP_LOGD("novy", "Retry %d: Current state: %s, Target: %s", 
+    #         ESP_LOGD("novy", "Retry %d: Current state: %s, Target: %s",
     #                  retry_count, current_state ? "ON" : "OFF", target_state ? "ON" : "OFF");
-    #         
+    #
     #         if (current_state == target_state) {
     #           ESP_LOGD("novy", "Success! Correct state reached after %d retries", retry_count);
     #           break;
     #         }
-    #         
+    #
     #         retry_count++;
-    #         
+    #
     #         if (retry_count <= max_retries) {
     #           ESP_LOGW("novy", "State mismatch, retry %d/%d...", retry_count, max_retries);
     #         } else {
     #           ESP_LOGE("novy", "Failed to reach target state after %d retries", max_retries);
     #         }
     #       }
-
 
 
     #  - lambda: |-
@@ -435,8 +431,7 @@ interval:
                       call.perform();
                   - logger.log:
                       format: "Select synced: %d → %d"
-                      args: [ 'std::stoi(id(select_level).current_option())', 'static_cast<int>(id(vent_level).state)' ]
+                      args: ['std::stoi(id(select_level).current_option())', 'static_cast<int>(id(vent_level).state)']
             - globals.set:
                 id: vent_sync_in_progress
                 value: 'false'
-

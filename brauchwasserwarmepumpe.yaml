@@ -57,7 +57,7 @@ switch:
     pin: GPIO4
     id: relay_1
     restore_mode: RESTORE_DEFAULT_OFF
-    # internal: true # Hidden from HA
+    # internal: true  # Hidden from HA
     on_turn_on:
       lambda: update_sg_ready_select(id(sg_ready_mode), id(relay_1), id(relay_2));
     on_turn_off:
@@ -68,7 +68,7 @@ switch:
     pin: GPIO15
     id: relay_2
     restore_mode: RESTORE_DEFAULT_OFF
-    # internal: true # Hidden from HA
+    # internal: true  # Hidden from HA
     on_turn_on:
       lambda: update_sg_ready_select(id(sg_ready_mode), id(relay_1), id(relay_2));
     on_turn_off:
@@ -81,13 +81,13 @@ select:
     id: sg_ready_mode
     icon: "mdi:heat-pump"
     optimistic: true
-    options: # needs to be in sync with consts on functions.h
+    options:  # needs to be in sync with consts on functions.h
       - "1 - Sperrung"
       - "2 - Normalbetrieb"
       - "3 - Einschaltempfehlung"
       - "4 - Aktivierung"
     initial_option: "2 - Normalbetrieb"
-    
+
     on_value:
       then:
         - lambda: set_sg_ready_mode_text(x, id(relay_1), id(relay_2));

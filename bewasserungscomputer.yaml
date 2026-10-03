@@ -37,8 +37,8 @@ switch:
     id: valve_1
     restore_mode: ALWAYS_OFF
     on_turn_on:
-    - delay: 3600s
-    - switch.turn_off: valve_1
+      - delay: 3600s
+      - switch.turn_off: valve_1
 
   - platform: gpio
     pin: GPIO33
@@ -46,8 +46,8 @@ switch:
     id: valve_2
     restore_mode: ALWAYS_OFF
     on_turn_on:
-    - delay: 3600s
-    - switch.turn_off: valve_1
+      - delay: 3600s
+      - switch.turn_off: valve_1
 
   - platform: gpio
     pin: GPIO25
@@ -55,8 +55,8 @@ switch:
     id: valve_3
     restore_mode: ALWAYS_OFF
     on_turn_on:
-    - delay: 3600s
-    - switch.turn_off: valve_1
+      - delay: 3600s
+      - switch.turn_off: valve_1
 
   - platform: gpio
     pin: GPIO26
@@ -64,8 +64,8 @@ switch:
     id: valve_4
     restore_mode: ALWAYS_OFF
     on_turn_on:
-    - delay: 3600s
-    - switch.turn_off: valve_1
+      - delay: 3600s
+      - switch.turn_off: valve_1
 
 #   - platform: gpio
 #     pin: GPIO27
@@ -81,15 +81,14 @@ switch:
 #     name: "Relay 8"
 
 
-
 sensor:
-  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+  - platform: wifi_signal  # Reports the WiFi signal strength/RSSI in dB
     name: "WiFi Signal dB"
     id: wifi_signal_db
     update_interval: 60s
     entity_category: "diagnostic"
-  
-  - platform: copy # Reports the WiFi signal strength in %
+
+  - platform: copy  # Reports the WiFi signal strength in %
     source_id: wifi_signal_db
     name: "WiFi Signal Percent"
     filters:
@@ -122,7 +121,7 @@ sprinkler:
         enable_switch: "Aktiviere Reserve"
         run_duration_number: "Reserves Laufzeit"
         valve_switch_id: valve_4
-             
+
 button:
   - platform: restart
     name: "Neu starten"

@@ -33,7 +33,6 @@ wifi:
 captive_portal:
 
 
-
 ################################################################################
 # Device Specific Config
 
@@ -52,8 +51,8 @@ binary_sensor:
   - platform: gpio
     pin:
       number: GPIO5
-      #mode: INPUT_PULLUP
-      #inverted: True
+      # mode: INPUT_PULLUP
+      # inverted: True
     name: ${device_name}
     on_state:
       then:
@@ -80,4 +79,3 @@ sensor:
   - platform: wifi_signal
     name: ${device_name} WiFi Signal
     update_interval: 60s
-    
