@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 #
-# Mirror the ESPHome configs from Home Assistant into this repo.
+# Mirror the ESPHome configs from Home Assistant into this repo, or push the
+# repo's configs back with --push.
 #
 # Mount the Samba share first (Finder: smb://homeassistant.local/config).
 #
-# Usage: ./sync.sh [--dry-run] [source]
+# Usage: ./sync.sh [--dry-run] [--push] [source]
 #   source defaults to $ESPHOME_SRC or /Volumes/config/esphome
 
 set -euo pipefail
@@ -12,10 +13,15 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 args=()
-if [[ "${1:-}" == "--dry-run" || "${1:-}" == "-n" ]]; then
-  args+=(--dry-run)
+push=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run | -n) args+=(--dry-run) ;;
+    --push | -p) push=true ;;
+    *) break ;;
+  esac
   shift
-fi
+done
 
 src="${1:-${ESPHOME_SRC:-/Volumes/config/esphome}}"
 
@@ -24,8 +30,18 @@ if [[ ! -d "$src" ]]; then
   exit 1
 fi
 
-# Files deleted on Home Assistant are deleted here too; git keeps the history.
-rsync -a --delete --itemize-changes "${args[@]+"${args[@]}"}" \
+if $push; then
+  # No --delete: files that only exist on Home Assistant are left alone.
+  from=./
+  to="$src/"
+else
+  # Files deleted on Home Assistant are deleted here too; git keeps the history.
+  args+=(--delete)
+  from="$src/"
+  to=./
+fi
+
+rsync -a --itemize-changes "${args[@]+"${args[@]}"}" \
   --exclude='/.git/' \
   --exclude='.esphome/' \
   --exclude='.pioenvs/' \
@@ -37,6 +53,8 @@ rsync -a --delete --itemize-changes "${args[@]+"${args[@]}"}" \
   --exclude='/.gitignore' \
   --exclude='/secrets.yaml.example' \
   --exclude='/README.md' \
-  "$src/" ./
+  "$from" "$to"
 
-git status --short
+if ! $push; then
+  git status --short
+fi
