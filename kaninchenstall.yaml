@@ -42,7 +42,6 @@ switch:
   - platform: gpio
     pin:
       number: GPIO17
-      inverted: true
     id: relay_close
     restore_mode: ALWAYS_OFF
 
