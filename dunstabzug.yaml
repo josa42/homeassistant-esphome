@@ -47,10 +47,25 @@ globals:
     type: bool
     initial_value: 'true'
 
-  - id: last_output_state
+  # Zustand, den das Licht haben soll. Neue Befehle überschreiben ihn, solange
+  # apply_light noch auf die Lampe wartet ("latest wins").
+  - id: light_target
     type: bool
-    restore_value: no
     initial_value: 'false'
+
+  # true, solange apply_light die Lampe schaltet
+  - id: light_busy
+    type: bool
+    initial_value: 'false'
+
+  # Zustand, den led_status nach dem laufenden Toggle melden soll
+  - id: light_expected
+    type: bool
+    initial_value: 'false'
+
+  - id: light_attempts
+    type: int
+    initial_value: '0'
 
 ####################################################################################################
 
@@ -67,10 +82,14 @@ sensor:
     pin:
       number: 34
     attenuation: 11db
-    update_interval: 1s
+    update_interval: 100ms
     accuracy_decimals: 1
     filters:
       - multiply: 5.0  # Kalibriere später
+      # Einzelne Ausreißer verwerfen (verursachten 1s an/aus Ghost-Events)
+      - median:
+          window_size: 5
+          send_every: 1
     unit_of_measurement: V
     id: voltage_light
 
@@ -79,6 +98,8 @@ binary_sensor:
     id: led_status
     lambda: |-
       return id(voltage_light).state > 1;
+    filters:
+      - delayed_on_off: 500ms
     on_state:
       then:
         - script.execute: { id: sync_led }
@@ -130,22 +151,72 @@ script:
           repeat:
             times: 2
             wait_time: 10ms
-  - id: sync_led
+  # Schaltet per Toggle-Code, bis die Lampe light_target erreicht hat. Die Lampe
+  # blendet ein/aus, daher wird nach jedem Toggle gewartet, bis led_status den
+  # neuen Zustand meldet, bevor erneut verglichen wird.
+  - id: apply_light
+    mode: single
     then:
       - globals.set:
-          id: syncing_from_sensor
+          id: light_busy
           value: 'true'
+      - globals.set:
+          id: light_attempts
+          value: '0'
+      - while:
+          condition:
+            lambda: 'return id(led_status).state != id(light_target) && id(light_attempts) < 3;'
+          then:
+            - lambda: |-
+                id(light_attempts) += 1;
+                id(light_expected) = !id(led_status).state;
+            - script.execute: { id: send_light }
+            - script.wait: send_light
+            - wait_until:
+                condition:
+                  lambda: 'return id(led_status).state == id(light_expected);'
+                timeout: 5s
+            # Lampe zu Ende blenden lassen, bevor erneut getoggelt wird
+            - delay: 1s
       - if:
           condition:
-            binary_sensor.is_on: led_status
+            lambda: 'return id(led_status).state != id(light_target);'
           then:
-            - light.turn_on: light_led
-          else:
-            - light.turn_off: light_led
-      - delay: 500ms
+            - logger.log:
+                level: WARN
+                format: "Light did not reach target state"
       - globals.set:
-          id: syncing_from_sensor
+          id: light_busy
           value: 'false'
+      # Tatsächlichen Zustand übernehmen (auch nach Fehlschlag)
+      - script.execute: { id: sync_led }
+
+  - id: sync_led
+    mode: restart
+    then:
+      # Während apply_light läuft, zeigt das Licht den Zielzustand; Zwischenstände
+      # der Lampe (Einblenden) nicht übernehmen. apply_light ruft sync_led am Ende auf.
+      - if:
+          condition:
+            lambda: 'return !id(light_busy);'
+          then:
+            - globals.set:
+                id: syncing_from_sensor
+                value: 'true'
+            - globals.set:
+                id: light_target
+                value: !lambda 'return id(led_status).state;'
+            - if:
+                condition:
+                  binary_sensor.is_on: led_status
+                then:
+                  - light.turn_on: light_led
+                else:
+                  - light.turn_off: light_led
+            - delay: 500ms
+            - globals.set:
+                id: syncing_from_sensor
+                value: 'false'
 
 ####################################################################################################
 # Buttons
@@ -180,13 +251,13 @@ output:
     write_action:
       - if:
           condition:
-            lambda: 'return !id(syncing_from_sensor) && (state != id(led_status).state);'
+            lambda: 'return !id(syncing_from_sensor);'
           then:
-            - script.execute: { id: send_light }
-          # condition:
-          #   lambda: |
-          #     return !id(syncing_from_sensor) && state != id(last_output_state);
-          # then:
-          #   - lambda: |
-          #       id(last_output_state) = state;
-          #   - script.execute: { id: send_light }
+            - globals.set:
+                id: light_target
+                value: !lambda 'return state;'
+            - if:
+                condition:
+                  lambda: 'return !id(light_busy);'
+                then:
+                  - script.execute: { id: apply_light }
