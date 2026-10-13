@@ -93,11 +93,37 @@ sensor:
     unit_of_measurement: V
     id: voltage_light
 
+  # Diagnose: Pegel bei Licht an/aus und Störungen durchs Kochfeld sichtbar
+  # machen, um die Schwellwerte von led_status zu kalibrieren. Ein Wert pro
+  # Sekunde, Minimum und Maximum der letzten 10 Messungen.
+  - platform: copy
+    source_id: voltage_light
+    name: Licht Spannung max
+    entity_category: diagnostic
+    filters:
+      - max:
+          window_size: 10
+          send_every: 10
+
+  - platform: copy
+    source_id: voltage_light
+    name: Licht Spannung min
+    entity_category: diagnostic
+    filters:
+      - min:
+          window_size: 10
+          send_every: 10
+
 binary_sensor:
-  - platform: template
+  # Hysterese gegen Störungen beim Kochen, die über die alte Schwelle von 1 V
+  # sprangen. Die Werte sind geschätzt, nach Messung mit den Diagnose-Sensoren
+  # anpassen.
+  - platform: analog_threshold
     id: led_status
-    lambda: |-
-      return id(voltage_light).state > 1;
+    sensor_id: voltage_light
+    threshold:
+      upper: 2.0
+      lower: 1.0
     filters:
       - delayed_on_off: 500ms
     on_state:
