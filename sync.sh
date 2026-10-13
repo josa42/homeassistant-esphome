@@ -41,18 +41,19 @@ else
   to=./
 fi
 
-rsync -a --itemize-changes "${args[@]+"${args[@]}"}" \
-  --exclude='/.git/' \
-  --exclude='.esphome/' \
-  --exclude='.pioenvs/' \
-  --exclude='.piolibdeps/' \
-  --exclude='/.device-builder*' \
+# Only device files are synced: YAML configs and the C/C++ sources they
+# include. Everything else (docs, CI, host-side tests, this script) stays
+# repo-only. Excluded files are also safe from --delete.
+rsync -a --prune-empty-dirs --itemize-changes "${args[@]+"${args[@]}"}" \
+  --exclude='.*' \
   --exclude='/secrets.yaml' \
-  --exclude='.DS_Store' \
-  --exclude='/sync.sh' \
-  --exclude='/.gitignore' \
-  --exclude='/secrets.yaml.example' \
-  --exclude='/README.md' \
+  --exclude='*_test.cpp' \
+  --include='*/' \
+  --include='*.yaml' \
+  --include='*.h' \
+  --include='*.c' \
+  --include='*.cpp' \
+  --exclude='*' \
   "$from" "$to"
 
 if ! $push; then
