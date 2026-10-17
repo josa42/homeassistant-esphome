@@ -43,9 +43,12 @@ fi
 
 # Only device files are synced: YAML configs and the C/C++ sources they
 # include. Everything else (docs, CI, host-side tests, this script) stays
-# repo-only. Excluded files are also safe from --delete.
+# repo-only. Excluded files are also safe from --delete. Directories are
+# always included so device folders sync, which means a repo-only directory
+# must be excluded here, or a pull tries to delete it.
 rsync -a --prune-empty-dirs --itemize-changes "${args[@]+"${args[@]}"}" \
   --exclude='.*' \
+  --exclude='/docs/' \
   --exclude='/secrets.yaml' \
   --exclude='*_test.cpp' \
   --include='*/' \
