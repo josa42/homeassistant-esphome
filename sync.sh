@@ -49,6 +49,7 @@ fi
 rsync -a --prune-empty-dirs --itemize-changes "${args[@]+"${args[@]}"}" \
   --exclude='.*' \
   --exclude='/docs/' \
+  --exclude='/enclosures/' \
   --exclude='/secrets.yaml' \
   --exclude='*_test.cpp' \
   --include='*/' \
