@@ -37,6 +37,6 @@ c++ -std=c++17 -Wall -o /tmp/lp66_test tv-lift/lp66_test.cpp && /tmp/lp66_test
 
 ## Conventions
 
-- Comments in the device configs are in German, match that when editing them.
+- Code comments are always in English. Older device configs still have German comments, translate them when editing those parts.
 - Commit messages follow Conventional Commits with the device as scope, e.g. `fix(dunstabzug): ...`.
 - Live entity states, history and automations can be inspected through the Home Assistant MCP server. Check automations that act on a device's entities (e.g. "Küche - Linked Lights") before blaming the firmware.
