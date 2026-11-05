@@ -1,134 +1,133 @@
-// Gehäuse für das Waveshare ESP32-S3-Touch-LCD-1.28 (shot-timer.yaml),
-// links seitlich an einer Quick Mill Orione 03000, Front zeigt nach vorne.
-// Idee wie beim "Espresso Coffee Shot Timer RP2040" von DaniilKrant auf
-// MakerWorld, aber geklemmt statt Magnet, weil das Edelstahlgehäuse nicht
-// magnetisch ist.
+// Enclosure for the Waveshare ESP32-S3-Touch-LCD-1.28 (shot-timer.yaml),
+// sticking out sideways on the left of a Quick Mill Orione 03000, display
+// facing forward. Idea from the "Espresso Coffee Shot Timer RP2040" by
+// DaniilKrant on MakerWorld, but clamped instead of magnetic, because the
+// stainless steel housing isn't magnetic.
 //
-// Zwei Teile:
-// - stand: Gehäusering, Arm, Stütze und Clip in einem Stück. Der Clip ist ein
-//   U, das von oben auf den Rand der Tassenablage geschoben wird: die Stütze
-//   liegt plan außen an der Seitenwand, der innere Schenkel klemmt den Rand von
-//   innen. Die Stütze verhindert, dass der Clip unter dem Gewicht kippt. Der Arm ist ein geschlossener Kanal für USB-C-Stecker und Kabel.
-//   Am Ende geht er durch die Stütze, dort führt ein Schlitz das Kabel nach
-//   hinten. Gedruckt wird mit der Front nach unten, so liegen Display-Blende,
-//   Arm und Stütze flach auf dem Bett, das U des Clips steht senkrecht und
-//   die Rückwand des Kanals wird überbrückt. In der Stütze läuft der Kanal
-//   oben unter 45° zum Schlitz zusammen, damit dort nichts frei überhängt.
-// - cover: Rückdeckel, wird eingepresst und drückt das Board über drei Stege
-//   nach vorne. Wird mit der Rückseite nach unten gedruckt.
+// Two parts:
+// - stand: display ring, arm, leg and clip in one piece. The clip is a U that
+//   slides down onto the rim of the cup tray: the leg lies flat against the
+//   outside of the side wall, the inner flank clamps the rim from the inside.
+//   The leg keeps the clip from tilting under the weight. The arm is a closed
+//   channel for the USB-C plug and cable. At its end it passes through the
+//   leg, where a slot leads the cable to the back. Printed front down, so the
+//   display bezel, arm and leg lie flat on the bed, the U of the clip stands
+//   upright and the back wall of the channel is bridged. Inside the leg the
+//   channel narrows towards the slot at 45°, so nothing overhangs freely.
+// - cover: back cover, pressed in, pushes the board forward with three pegs.
+//   Printed back down.
 //
-// Das Board ist um 90° gedreht eingebaut, USB-C zeigt zur Maschine. Das Bild
-// muss in der Firmware entsprechend gedreht werden.
+// The board sits rotated by 90°, USB-C points towards the machine. The
+// firmware rotates the image to match.
 //
-// Zusammenbau: Stecker von der Seitenwand-Seite durch die Stütze und den Arm
-// fädeln, bis er im Ring herauskommt, ins Board stecken, Board von hinten
-// einlegen, Kabel in den Schlitz der Stütze drücken, Deckel einpressen.
+// Assembly: thread the plug from the wall side through the leg and the arm
+// until it comes out in the ring, plug it into the board, insert the board
+// from the back, press the cable into the slot in the leg, snap on the cover.
 //
-// Koordinaten im eingebauten Zustand: y nach oben, z nach hinten, x zeigt
-// von vorne gesehen nach links. Die Maschine liegt also bei -x, alles auf
-// ihrer Seite (Arm, Stütze, Clip) wird mit side() gespiegelt und dort mit
-// positiven Abständen gebaut. Displayfront bei z = 0, Displaymitte bei
-// x = y = 0. Maße des Boards aus der Waveshare-Zeichnung
-// (ESP32-S3-Touch-LCD-1.28.dxf).
+// Coordinates as mounted: y up, z backwards, x points left as seen from the
+// front. The machine is at -x, so everything on its side (arm, leg, clip) is
+// mirrored with side() and built with positive distances there. Display front
+// at z = 0, display centre at x = y = 0. Board dimensions from the Waveshare
+// drawing (ESP32-S3-Touch-LCD-1.28.dxf).
 
-// Standard ist die Druckplatte, damit ein Export direkt druckbar ist.
+// The print plate is the default, so a plain export is ready to print.
 part = "print"; // [print, assembly, stand, cover]
 
-/* [Position, bitte an der Maschine nachmessen] */
-// Displaymitte bis Außenseite der Seitenwand
+/* [Position, measure on the machine] */
+// display centre to the outside of the side wall
 arm_len = 55;
-// Dicke des Rands der Tassenablage, mit Probeklammern ermittelt (2,3 sitzt stramm)
+// thickness of the cup tray rim, found with test clips (2.3 sits tight)
 rim_d = 2.3;
-// Klemmung: so viel enger als rim_d wird das U gedruckt
+// the U is printed this much narrower than rim_d so it clamps
 rim_squeeze = 0.2;
-// Höhe der Oberkante des Rands über der Displaymitte
+// height of the top of the rim above the display centre
 rim_above = 35;
-// innerer Schenkel des U, unter der Mitte der Rundung gemessen
+// inner flank of the U, measured below the centre of its rounding
 rim_inner = 6;
-// Beim ersten Druck stand die Stütze unten (Unterkante Arm) rund 3 mm von der
-// Wand ab. Das U wird um so viel schräg gestellt, dass die Stütze unten anliegt,
-// plus etwas Vorspannung, damit nichts wackelt.
+// On the first print the leg stood about 3 mm off the wall at the bottom of
+// the arm. The U is tilted against the leg so the leg touches the wall at the
+// bottom, plus some preload so nothing wobbles.
 rim_gap = 3;
 rim_preload = 0.5;
-// Oben hat der Rand einen leichten Wulst: die Rundung des U ist um so viel
-// größer, darunter klemmt das U wieder mit der normalen Weite
+// The rim has a slight bead on top: the rounding of the U is this much larger,
+// below it the U clamps with its normal width again
 rim_bead = 0.3;
-// Länge von Steckergehäuse plus Knickschutz des USB-Kabels
+// length of the plug housing plus strain relief of the USB cable
 plug_len = 28;
-// Breite des Kabelschlitzes in der Stütze, etwas weniger als das Kabel klemmt es
+// width of the cable slot in the leg, a bit less than the cable clamps it
 cable_w = 4;
-// lichte Höhe zum Durchfädeln des Steckers in der Stütze, nach vorne gemessen
+// clear height for threading the plug through the leg, from the front
 plug_h = 8.5;
 
 /* [Board] */
-lens_d = 38.51;        // Linse = Platinenumriss
-view_d = 35.0;         // Sichtöffnung, aktive Fläche ist Ø 33,4
-usb_bottom = 21.78;    // Außenkante USB-C ab Displaymitte
-tab_w = 14.8;          // Platinenzunge, auf der USB-C sitzt
+lens_d = 38.51;        // lens = board outline
+view_d = 35.0;         // display opening, the active area is 33.4
+usb_bottom = 21.78;    // outer edge of USB-C from the display centre
+tab_w = 14.8;          // board tab carrying USB-C
 tab_bottom = 19.4;
-stack = 8.4;           // Linsenfront bis höchstes Bauteil hinten
-pcb_back = 5.0;        // Linsenfront bis Platinenrückseite
-board_rot = -90;       // USB-C (im Datenblatt unten) zeigt zur Maschine
+stack = 8.4;           // lens front to the tallest part on the back
+pcb_back = 5.0;        // lens front to the back of the board
+board_rot = -90;       // USB-C (bottom in the datasheet) points to the machine
 
-/* [Gehäuse] */
-clr = 0.3;             // Spiel rund ums Board
+/* [Housing] */
+clr = 0.3;             // clearance around the board
 wall = 2;
-lip = 1.2;             // Stärke der Frontblende
+lip = 1.2;             // thickness of the front bezel
 cover_t = 2;
-cover_lip_h = 1.5;     // so tief steckt der Deckel im Gehäuse
+cover_lip_h = 1.5;     // how deep the cover's collar reaches into the ring
 cover_lip_w = 1.2;
-// Rastnase an den Stegen des Deckels, 0 = nur Presssitz. Abzüglich 0,1 mm Luft
-// zur Ringwand greift sie 0,5 mm in die Rille. Die Stege sind dafür dünn, damit
-// sie beim Einrasten nur etwa 3 % gedehnt werden.
+// Snap nose on the cover's pegs, 0 = press fit only. Minus the 0.1 mm gap to
+// the ring wall it engages 0.5 mm in the groove. The pegs are thin for that, so
+// they stretch only about 3 % when snapping in.
 snap = 0.6;
-snap_w = 4;            // Breite der Stege mit Rastnase
-peg_t = 1;             // radiale Stärke der Stege
-ring_lead = 0.6;       // Fase innen an der Hinterkante des Rings zum Einsetzen
-pry = [6, 1];          // Kerbe am Deckelrand zum Aufhebeln (Breite, Tiefe)
-press = 0.1;           // Übermaß weg vom Spiel für den Presssitz
+snap_w = 4;            // width of the pegs with a snap nose
+peg_t = 1;             // radial thickness of the pegs
+ring_lead = 0.6;       // chamfer inside the back edge of the ring for inserting
+pry = [6, 1];          // notch in the cover edge to pry it off (width, depth)
+press = 0.1;           // collar this much smaller than the ring's inside
 
-/* [Arm und Clip] */
-ch_h = 13.5;           // lichte Höhe des Kabelkanals, passt für Steckergehäuse bis ~13 mm
-ch_front = 2;          // Vorderwand des Kanals
+/* [Arm and clip] */
+ch_h = 13.5;           // clear height of the cable channel, fits plug housings up to ~13 mm
+ch_front = 2;          // front wall of the channel
 ch_wall = 2;
-leg_t = 4.5;           // Stütze an der Seitenwand
-hook_t = 3.5;          // Wand von Rundung und innerem Schenkel
-lead_in = 0.8;         // Fase innen unten am inneren Schenkel zum Aufschieben
+leg_t = 4.5;           // leg against the side wall
+hook_t = 3.5;          // wall of the rounding and the inner flank
+lead_in = 0.8;         // chamfer at the bottom of the inner flank for sliding on
 
-/* [Form] */
-arm_root = 26;         // Höhe des Arms am Ring, verjüngt sich bis zur Stütze
-fillet = 6;            // Hohlkehlen zwischen Ring, Arm und Stütze
-round = 1;             // Rundung der Außenecken im Profil
-edge = 0.8;            // Fase an Vorder- und Hinterkante, 45° und damit ohne Support druckbar
+/* [Shape] */
+arm_root = 26;         // arm height at the ring, tapers towards the leg
+fillet = 6;            // fillets between ring, arm and leg
+round = 1;             // rounding of outer corners in the profile
+edge = 0.8;            // 45° chamfer on front and back edges, prints without support
 
 $fa = 4;
 $fs = 0.4;
 
-inner_d = lip + stack + 0.5 + cover_lip_h; // Innentiefe des Rings
+inner_d = lip + stack + 0.5 + cover_lip_h; // inner depth of the ring
 cover_z = inner_d;
-ch_d = cover_z + cover_t;                   // Rückwand des Kanals fluchtet mit dem Deckel
-// Stütze und Clip sind tiefer als der Arm, damit über dem Durchgang für den
-// Stecker Platz für die 45°-Schrägen zum Kabelschlitz bleibt
+ch_d = cover_z + cover_t;                   // back wall of the channel flush with the cover
+// Leg and clip are deeper than the arm, so above the passage for the plug
+// there's room for the 45° slopes towards the cable slot
 pass_top = ch_front + plug_h;
 leg_w = max(ch_d, pass_top + (ch_h - cable_w) / 2 + 2);
 leg_x = arm_len - leg_t;
-rim_w = rim_d - rim_squeeze;                // lichte Weite des U
+rim_w = rim_d - rim_squeeze;                // clear width of the U
 rim_r = rim_w / 2;
-rim_x = arm_len + rim_r;                    // Mitte der Rundung, die Außenwand ist plan
+rim_x = arm_len + rim_r;                    // centre of the rounding, the wall is flat
 rim_y = rim_above - rim_r;
-// Neigung des U gegenüber der Stütze, gedreht um die Oberkante an der Wand
+// tilt of the U against the leg, rotated around its top edge at the wall
 rim_tilt = atan((rim_gap + rim_preload) / (rim_above - (-ch_h / 2 - ch_wall)));
 rim_pivot = [arm_len, rim_above];
-// höchster Punkt der Rastnase, knapp hinter der Stegspitze (lip + pcb_back)
+// peak of the snap nose, just behind the tip of the pegs (lip + pcb_back)
 snap_z = lip + pcb_back + 0.6;
 ch_bottom = -ch_h / 2 - ch_wall;
 
-assert(rim_y - rim_inner > ch_h / 2 + ch_wall, "Rand zu niedrig für den Arm, rim_above vergrößern");
+assert(rim_y - rim_inner > ch_h / 2 + ch_wall, "rim too low for the arm, increase rim_above");
 if (usb_bottom + plug_len > leg_x)
-  echo(str("WARNUNG: Stecker reicht bis x = ", usb_bottom + plug_len, ", die Stütze beginnt bei x = ",
-    leg_x, ". arm_len vergrößern oder einen Winkelstecker nehmen."));
+  echo(str("WARNING: plug reaches x = ", usb_bottom + plug_len, ", the leg starts at x = ",
+    leg_x, ". Increase arm_len or use an angled plug."));
 
-// Board-Umriss mit Zunge für USB-C, als konvexe Hülle
+// board outline with the tab for USB-C, as a convex hull
 module cavity2d(extra = 0) {
   offset(r = clr + extra) rotate(board_rot) hull() {
     circle(d = lens_d);
@@ -141,23 +140,22 @@ module outline2d() {
   offset(r = wall) cavity2d();
 }
 
-// Spiegelt auf die Maschinenseite
+// mirrors onto the machine side
 module side() {
   mirror([1, 0, 0]) children();
 }
 
-// Kabelkanal von kurz vor der Buchse bis zur Stütze. Er reicht hinten bis zum
-// Deckel, im Ring ist er dadurch nach hinten offen und der Stecker lässt sich
-// mit dem Board von hinten einlegen. Schneidet auch den Deckelrand.
+// Cable channel from just before the socket to the leg. It reaches back to
+// the cover, so inside the ring it's open to the back and the plug can be
+// inserted together with the board. Also cuts the cover's collar.
 module channel() {
   x0 = usb_bottom - 3;
   side() translate([x0, -ch_h / 2, ch_front]) cube([leg_x + 0.01 - x0, ch_h, cover_z - ch_front]);
 }
 
-// Schlitz in der Stütze, führt das Kabel aus dem Kanal nach hinten
-// Durchgang durch die Stütze: unten so hoch, dass der Stecker durchpasst,
-// darüber unter 45° zum Kabelschlitz verengt, der nach hinten offen ist. Im
-// Druck sind die Schrägen 45°-Überhänge, keine freien Zungen.
+// Passage through the leg: tall enough at the bottom for the plug, above that
+// narrowing at 45° to the cable slot, which is open to the back. In print the
+// slopes are 45° overhangs, not free tongues.
 module cable_slot() {
   side() translate([leg_x, 0, 0]) rotate([90, 0, 90]) linear_extrude(leg_t + 1)
     polygon([
@@ -168,16 +166,15 @@ module cable_slot() {
     ]);
 }
 
-// Dreht das U um seine Oberkante an der Wand, siehe rim_tilt
+// rotates the U around its top edge at the wall, see rim_tilt
 module rim_rotate() {
   translate(rim_pivot) rotate(-rim_tilt) translate(-rim_pivot) children();
 }
 
-// Umriss des ganzen Stands von vorne: Ring, sich verjüngender Arm und Stütze
-// gehen über Hohlkehlen ineinander über. Oben sitzt das U über dem Rand, mit
-// runder Kappe von der Stütze bis über den inneren Schenkel. Das U ist um
-// rim_tilt gegen die Stütze geneigt, an der Wandseite entsteht dadurch oben
-// eine flache Aussparung.
+// Outline of the whole stand from the front: ring, tapering arm and leg blend
+// into each other with fillets. On top the U sits over the rim, with a round
+// cap from the leg over the inner flank. The U is tilted by rim_tilt against
+// the leg, which leaves a shallow recess on the wall side at the top.
 module profile2d() {
   r_out = rim_r + hook_t;
   offset(r = 0.5) offset(r = -0.5) difference() {
@@ -192,25 +189,25 @@ module profile2d() {
           translate([leg_x + r_out, rim_y]) circle(r = r_out);
           translate([rim_x, rim_y]) circle(r = r_out);
         }
-        // innerer Schenkel
+        // inner flank
         translate([arm_len + rim_w, rim_y - rim_inner]) square([hook_t, rim_inner]);
       }
     }
     side() rim_rotate() {
-      // lichte Weite des U, unten offen bis knapp unter den inneren Schenkel
+      // clear width of the U, open at the bottom to just below the inner flank
       translate([rim_x, rim_y]) circle(r = rim_r);
-      // Platz für den Wulst, Scheitel bleibt auf gleicher Höhe
+      // room for the bead, the apex stays at the same height
       translate([rim_x, rim_y - rim_bead]) circle(r = rim_r + rim_bead);
       translate([arm_len, rim_y - rim_inner - 1]) square([rim_w, rim_inner + 1]);
-      // Einführschräge
+      // lead-in chamfer
       translate([arm_len + rim_w, rim_y - rim_inner])
         polygon([[0, -0.01], [lead_in, -0.01], [0, lead_in]]);
     }
   }
 }
 
-// Extrudiert mit einer 45°-Fase an Vorder- und Hinterkante, in Stufen von
-// edge / 4, das ist etwa eine Druckschicht
+// Extrudes with a 45° chamfer on the front and back edge, in steps of
+// edge / 4, which is about one print layer
 module edge_extrude(h, front = true, back = true) {
   n = 4;
   for (i = [0 : n - 1]) {
@@ -228,23 +225,23 @@ module stand() {
   difference() {
     union() {
       edge_extrude(ch_d) profile2d();
-      // Stütze und Clip tiefer
+      // leg and clip are deeper
       edge_extrude(leg_w) intersection() {
         profile2d();
         side() translate([leg_x, -100]) square(200);
       }
     }
-    // hinter dem Ring sitzt der Deckel
+    // the cover sits behind the ring
     translate([0, 0, inner_d]) linear_extrude(ch_d) offset(r = 0.01) outline2d();
     translate([0, 0, lip]) linear_extrude(inner_d) cavity2d();
-    // Sichtöffnung mit 45°-Fase nach vorne
+    // display opening with a 45° chamfer towards the front
     translate([0, 0, -0.01]) cylinder(d1 = view_d + 2 * lip, d2 = view_d, h = lip + 0.02);
     channel();
     cable_slot();
-    // Rille für die Rastnasen des Deckels
+    // groove for the cover's snap noses
     if (snap > 0)
       translate([0, 0, snap_z - 0.65]) linear_extrude(1.15) cavity2d(snap + 0.15);
-    // Einführfase für den Deckel
+    // lead-in chamfer for the cover
     hull() {
       translate([0, 0, inner_d - ring_lead]) linear_extrude(0.01) cavity2d();
       translate([0, 0, inner_d]) linear_extrude(0.01) cavity2d(ring_lead);
@@ -256,17 +253,17 @@ module cover() {
   difference() {
     union() {
       translate([0, 0, cover_z]) edge_extrude(cover_t, front = false) outline2d();
-      // Presssitz-Kragen, an den Stegen ausgespart, damit sie bis zur
-      // Deckelplatte frei federn
+      // press-fit collar, cut out at the pegs so they spring freely up to the
+      // cover plate
       translate([0, 0, cover_z - cover_lip_h]) linear_extrude(cover_lip_h + 0.01) difference() {
         cavity2d(-press);
         cavity2d(-press - cover_lip_w);
         for (a = peg_angles)
           rotate(board_rot + a) translate([0, -(snap_w / 2 + 0.6)]) square([30, snap_w + 1.2]);
       }
-      // Stege drücken auf den Platinenrand, weg von Tastern (~50°/130°),
-      // Akkustecker (~10°) und USB-C (270°), Winkel auf dem Board. Sie sind
-      // zugleich Rastarme: außen eine Nase, die in die Rille im Ring greift.
+      // Pegs push on the board edge, away from the buttons (~50°/130°), the
+      // battery connector (~10°) and USB-C (270°), angles on the board. They
+      // are snap arms too: a nose on the outside catches in the ring's groove.
       for (a = peg_angles)
         rotate(board_rot + a) intersection() {
           union() {
@@ -281,7 +278,7 @@ module cover() {
         }
     }
     channel();
-    // Kerbe zum Aufhebeln, gegenüber vom Arm
+    // notch for prying the cover off, opposite the arm
     translate([0, 0, cover_z + cover_t - pry[1]]) linear_extrude(pry[1] + 0.01) intersection() {
       difference() {
         offset(r = 0.01) outline2d();
@@ -294,10 +291,11 @@ module cover() {
 
 peg_angles = [90, 210, 330];
 
-// Rastnase außen am Steg: Rampe zur Spitze hin zum Einschieben, steilere Flanke
-// (etwa 60°) nach hinten, die hält und sich mit dem Hebel noch lösen lässt
+// Snap nose on the outside of a peg: a ramp towards the tip for snapping in, a
+// steeper flank (about 60°) towards the back that holds and still lets go when
+// pried
 module snap_nose() {
-  // beginnt an der Stegspitze, ragt nicht Richtung Platine
+  // starts at the tip of the peg, doesn't reach towards the board
   steps = [[-0.55, 0], [-0.3, 0.45], [0, 1], [0.35, 0]];
   difference() {
     for (i = [0 : len(steps) - 2])
@@ -314,7 +312,7 @@ module cover_print() {
 if (part == "assembly") {
   color("dimgray") stand();
   color("silver") cover();
-  // Wand der Tassenablage und Board zur Orientierung
+  // cup tray wall and board for orientation
   %side() translate([arm_len, -60, -60]) cube([rim_d, rim_above + 60, 120]);
   %translate([0, 0, 0.5]) cylinder(d = lens_d, h = stack - 0.5);
 } else if (part == "stand") {
