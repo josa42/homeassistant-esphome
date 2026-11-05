@@ -14,8 +14,8 @@
 //   display bezel, arm and leg lie flat on the bed, the U of the clip stands
 //   upright and the back wall of the channel is bridged. Inside the leg the
 //   channel narrows towards the slot at 45°, so nothing overhangs freely.
-// - cover: back cover, pressed in, pushes the board forward with three pegs.
-//   Printed back down.
+// - cover: back cover, snaps in with a bead around its collar and pushes the
+//   board forward with three pegs. Printed back down.
 //
 // The board sits rotated by 90°, USB-C points towards the machine. The
 // firmware rotates the image to match.
@@ -76,15 +76,14 @@ lip = 1.2;             // thickness of the front bezel
 cover_t = 2;
 cover_lip_h = 1.5;     // how deep the cover's collar reaches into the ring
 cover_lip_w = 1.2;
-// Snap nose on the cover's pegs, 0 = press fit only. Minus the 0.1 mm gap to
-// the ring wall it engages 0.5 mm in the groove. The pegs are thin for that, so
-// they stretch only about 3 % when snapping in.
-snap = 0.6;
-snap_w = 4;            // width of the pegs with a snap nose
-peg_t = 1;             // radial thickness of the pegs
-ring_lead = 0.6;       // chamfer inside the back edge of the ring for inserting
-pry = [6, 1];          // notch in the cover edge to pry it off (width, depth)
 press = 0.1;           // collar this much smaller than the ring's inside
+// Bead around the cover's collar that snaps into a groove in the ring,
+// 0 = press fit only. Minus the 0.1 mm gap to the ring it engages 0.3 mm. Ring
+// and collar are open at the cable channel, so both give way while snapping,
+// within the layer plane where the print is strong.
+snap = 0.4;
+ring_lead = 0.4;       // chamfer inside the back edge of the ring for the bead
+pry = [6, 1];          // notch in the cover edge to pry it off (width, depth)
 
 /* [Arm and clip] */
 ch_h = 13.5;           // clear height of the cable channel, fits plug housings up to ~13 mm
@@ -118,11 +117,13 @@ rim_y = rim_above - rim_r;
 // tilt of the U against the leg, rotated around its top edge at the wall
 rim_tilt = atan((rim_gap + rim_preload) / (rim_above - (-ch_h / 2 - ch_wall)));
 rim_pivot = [arm_len, rim_above];
-// peak of the snap nose, just behind the tip of the pegs (lip + pcb_back)
-snap_z = lip + pcb_back + 0.6;
+// peak of the snap bead, close to the bottom of the collar, so above it a full
+// wall stays between the groove and the lead-in chamfer
+snap_z = cover_z - cover_lip_h + 0.4;
 ch_bottom = -ch_h / 2 - ch_wall;
 
 assert(rim_y - rim_inner > ch_h / 2 + ch_wall, "rim too low for the arm, increase rim_above");
+assert(snap_z + 0.5 < inner_d - ring_lead, "snap groove runs into the lead-in chamfer");
 if (usb_bottom + plug_len > leg_x)
   echo(str("WARNING: plug reaches x = ", usb_bottom + plug_len, ", the leg starts at x = ",
     leg_x, ". Increase arm_len or use an angled plug."));
@@ -238,9 +239,9 @@ module stand() {
     translate([0, 0, -0.01]) cylinder(d1 = view_d + 2 * lip, d2 = view_d, h = lip + 0.02);
     channel();
     cable_slot();
-    // groove for the cover's snap noses
+    // groove for the cover's snap bead
     if (snap > 0)
-      translate([0, 0, snap_z - 0.65]) linear_extrude(1.15) cavity2d(snap + 0.15);
+      translate([0, 0, snap_z - 0.5]) linear_extrude(1) cavity2d(snap + 0.15);
     // lead-in chamfer for the cover
     hull() {
       translate([0, 0, inner_d - ring_lead]) linear_extrude(0.01) cavity2d();
@@ -249,32 +250,28 @@ module stand() {
   }
 }
 
+peg_angles = [90, 210, 330];
+
 module cover() {
   difference() {
     union() {
       translate([0, 0, cover_z]) edge_extrude(cover_t, front = false) outline2d();
-      // press-fit collar, cut out at the pegs so they spring freely up to the
-      // cover plate
+      // collar
       translate([0, 0, cover_z - cover_lip_h]) linear_extrude(cover_lip_h + 0.01) difference() {
         cavity2d(-press);
         cavity2d(-press - cover_lip_w);
-        for (a = peg_angles)
-          rotate(board_rot + a) translate([0, -(snap_w / 2 + 0.6)]) square([30, snap_w + 1.2]);
       }
+      if (snap > 0) snap_bead();
       // Pegs push on the board edge, away from the buttons (~50°/130°), the
-      // battery connector (~10°) and USB-C (270°), angles on the board. They
-      // are snap arms too: a nose on the outside catches in the ring's groove.
+      // battery connector (~10°) and USB-C (270°), angles on the board
       for (a = peg_angles)
         rotate(board_rot + a) intersection() {
-          union() {
-            translate([0, 0, lip + pcb_back + 0.05])
-              linear_extrude(cover_z - lip - pcb_back) difference() {
-                cavity2d(-press);
-                cavity2d(-press - peg_t);
-              }
-            if (snap > 0) snap_nose();
-          }
-          translate([0, -snap_w / 2, 0]) cube([30, snap_w, 30]);
+          translate([0, 0, lip + pcb_back + 0.05])
+            linear_extrude(cover_z - lip - pcb_back) difference() {
+              cavity2d(-press);
+              circle(r = lens_d / 2 - 1.4);
+            }
+          translate([0, -1.5, 0]) cube([30, 3, 30]);
         }
     }
     channel();
@@ -289,19 +286,15 @@ module cover() {
   }
 }
 
-peg_angles = [90, 210, 330];
-
-// Snap nose on the outside of a peg: a ramp towards the tip for snapping in, a
-// steeper flank (about 60°) towards the back that holds and still lets go when
-// pried
-module snap_nose() {
-  // starts at the tip of the peg, doesn't reach towards the board
-  steps = [[-0.55, 0], [-0.3, 0.45], [0, 1], [0.35, 0]];
+// Bead around the outside of the collar: a ramp towards the front for snapping
+// in, a 45° flank towards the back that holds and still lets go when pried
+module snap_bead() {
+  steps = [[-0.4, 0.25], [0, 1], [0.4, 0]];
   difference() {
     for (i = [0 : len(steps) - 2])
       hull() for (st = [steps[i], steps[i + 1]])
         translate([0, 0, snap_z + st[0]]) linear_extrude(0.01) cavity2d(-press + snap * st[1]);
-    translate([0, 0, snap_z - 2]) linear_extrude(3) cavity2d(-press - peg_t);
+    translate([0, 0, snap_z - 1]) linear_extrude(2) cavity2d(-press - cover_lip_w);
   }
 }
 
