@@ -1,0 +1,682 @@
+# Device: Waveshare ESP32-S3-Touch-LCD-1.28 on the coffee machine
+# MCU: ESP32-S3R2 (2 MB PSRAM, 16 MB flash), round 1.28" 240x240 LCD (GC9A01A, SPI),
+# touch CST816S and IMU QMI8658 on a shared I2C bus (GPIO6/GPIO7).
+#
+# The pump vibrates while the machine brews. The QMI8658 picks that up and
+# starts a countdown (25 s by default). A tap on the dimmed display only wakes
+# it. A tap on the bright display while idle: top half +1 s, bottom half -1 s.
+# If the pump runs past the countdown, the display counts the overtime up (+N).
+# When it stops, the display shows the shot time for 3 s, then the idle
+# screen. A tap resets the display.
+#
+# Brightness: bright for 30 s after a shot and after every tap, dimmed right
+# away after a false detection (less than 5 s of vibration). In standby (set
+# from Home Assistant while the coffee machine is off) the display stays off
+# and ignores touch and vibration.
+#
+# Detection as in daniilkrant/profitec-go-waterlevel-shottimer: standard
+# deviation of the acceleration over 10 samples (100 ms) per axis, the
+# strongest axis counts. The pump vibrates steadily, handling the machine
+# (inserting the portafilter) only in bursts. So the pump counts as running
+# once 8 of the last 10 windows are above the threshold, and as stopped at 2
+# or fewer.
+#
+# The threshold learns itself: the noise floor is measured while idle, the
+# pump vibration on every shot (5 s or longer). The threshold sits at 40 % of
+# the pump level, at least at four times the noise, but never above 60 % of
+# the pump level so a shot can still be detected.
+
+esphome:
+  name: shot-timer
+  friendly_name: Shot Timer
+  on_boot:
+    # After the standby switch has been restored
+    priority: -100
+    then:
+      - component.update: shots
+      - if:
+          condition:
+            switch.is_on: standby
+          then:
+            - light.turn_off: backlight
+          else:
+            - script.execute: display_dim
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+
+psram:
+  mode: quad
+  speed: 80MHz
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "mgZRp/qCVdh76faxfnjlSZpZOmJyixH3dXa3DUhz5z8="
+
+ota:
+  - platform: esphome
+    password: "69c07cc291c176de93949810ab3e5a57"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Shot Timer Fallback Hotspot"
+    password: "oC0Myf0GVa0"
+
+captive_portal:
+
+globals:
+  # 0 = idle, 1 = shot running, 2 = shot finished, time frozen
+  - id: phase
+    type: int
+    initial_value: '0'
+  - id: start_ms
+    type: uint32_t
+    initial_value: '0'
+  - id: stop_ms
+    type: uint32_t
+    initial_value: '0'
+  # Number of shots since the last reset
+  - id: shot_count
+    type: int
+    restore_value: true
+    initial_value: '0'
+  # Display bright (normal brightness) or dimmed
+  - id: is_bright
+    type: bool
+    initial_value: 'false'
+  # A tap shakes the device, so vibration is ignored shortly after
+  - id: last_touch_ms
+    type: uint32_t
+    initial_value: '0'
+  # Learned levels (standard deviation in g). The noise is relearned within a
+  # minute after boot, the pump only during shots, so that one is stored.
+  - id: noise_level
+    type: float
+    initial_value: '0'
+  - id: pump_level
+    type: float
+    restore_value: true
+    initial_value: '0'
+  # Pump running according to the last 10 windows
+  - id: vib_active
+    type: bool
+    initial_value: 'false'
+  # Sum and count of the windows of the running shot
+  - id: shot_sum
+    type: float
+    initial_value: '0'
+  - id: shot_n
+    type: int
+    initial_value: '0'
+
+i2c:
+  sda: GPIO6
+  scl: GPIO7
+  frequency: 400kHz
+
+spi:
+  clk_pin: GPIO10
+  mosi_pin: GPIO11
+  miso_pin: GPIO12
+
+motion:
+  - platform: qmi8658
+    id: imu
+    # 100 samples per second, 10 of them make one window
+    update_interval: 10ms
+    accelerometer_range: 2G
+
+sensor:
+  # Standard deviation per axis, one value every 100 ms
+  - platform: motion
+    type: acceleration_x
+    id: vib_x
+    internal: true
+    filters: &std_dev
+      - lambda: |-
+          static float buf[10];
+          static int n = 0;
+          buf[n++] = x;
+          if (n < 10) return {};
+          n = 0;
+          float mean = 0;
+          for (float v : buf) mean += v;
+          mean /= 10;
+          float var = 0;
+          for (float v : buf) var += (v - mean) * (v - mean);
+          return sqrtf(var / 10);
+  - platform: motion
+    type: acceleration_y
+    id: vib_y
+    internal: true
+    filters: *std_dev
+  - platform: motion
+    type: acceleration_z
+    id: vib_z
+    internal: true
+    filters: *std_dev
+
+  # Strongest axis per window, the threshold learns from it
+  - platform: template
+    id: vib_level
+    internal: true
+    update_interval: 100ms
+    lambda: 'return fmaxf(id(vib_x).state, fmaxf(id(vib_y).state, id(vib_z).state));'
+    on_value:
+      - lambda: |-
+          if (std::isnan(x))
+            return;
+          float thr = id(vibration_threshold).state;
+          bool above = x > thr;
+          // Once running, the pump only has to stay above half the threshold:
+          // it gets much quieter late in the shot when the pressure is up
+          float hold = fmaxf(thr * 0.5f, id(noise_level) * 3);
+          bool on = id(vib_active) ? x > hold : above;
+          // One bit per window, the last 10 (1 s)
+          static uint16_t hist = 0;
+          hist = ((hist << 1) | on) & 0x3FF;
+          int n = __builtin_popcount(hist);
+          if (n >= 8)
+            id(vib_active) = true;
+          else if (n <= 2)
+            id(vib_active) = false;
+
+          if (id(phase) == 1) {
+            // Windows below the threshold are dropouts or already the end
+            if (above) {
+              id(shot_sum) += x;
+              id(shot_n)++;
+            }
+          } else if (!id(vib_active) && !above && millis() > 5000) {
+            // Skip the first seconds, the IMU settles after boot. The floor
+            // follows quiet windows fast and louder ones slowly, windows above
+            // twice the floor (bumps, pump) don't count.
+            float &noise = id(noise_level);
+            if (noise == 0)
+              noise = x;
+            else if (x < noise)
+              noise += (x - noise) * 0.05f;
+            else if (x < 2 * noise)
+              noise += (x - noise) * 0.002f;
+          }
+
+  # For tuning the threshold: highest value of the last second
+  - platform: copy
+    source_id: vib_level
+    name: Vibrationsstärke
+    unit_of_measurement: g
+    accuracy_decimals: 3
+    entity_category: diagnostic
+    filters:
+      - max:
+          window_size: 10
+          send_every: 10
+
+  - platform: template
+    name: Grundrauschen
+    unit_of_measurement: g
+    accuracy_decimals: 4
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: 'return id(noise_level);'
+  - platform: template
+    name: Pumpenvibration
+    unit_of_measurement: g
+    accuracy_decimals: 3
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: 'return id(pump_level) > 0 ? id(pump_level) : NAN;'
+
+  - platform: template
+    name: Shots
+    id: shots
+    icon: mdi:coffee
+    state_class: total_increasing
+    accuracy_decimals: 0
+    update_interval: never
+    lambda: 'return id(shot_count);'
+
+  - platform: wifi_signal
+    name: WiFi Signal
+    update_interval: 60s
+    entity_category: diagnostic
+
+binary_sensor:
+  - platform: template
+    name: Vibration
+    id: vibration
+    lambda: 'return id(vib_active);'
+    # The timer starts once the pump runs steadily (after about 0.8 s), whether
+    # it was a shot is decided at the end
+    on_press:
+      - if:
+          condition:
+            lambda: |-
+              return !id(standby).state && id(auto_start).state && id(phase) != 1 &&
+                     millis() - id(last_touch_ms) > 2000;
+          then:
+            - script.execute: start_countdown
+    # Pump off (detected after about 0.8 s): shot finished, freeze the time.
+    # Less than 5 s of vibration was no shot, go back without a result.
+    on_release:
+      - if:
+          condition:
+            lambda: 'return id(phase) == 1;'
+          then:
+            - if:
+                condition:
+                  lambda: 'return millis() - 800 - id(start_ms) < 5000;'
+                then:
+                  - script.execute: stop_countdown
+                else:
+                  - script.execute: finish_countdown
+
+output:
+  - platform: ledc
+    pin: GPIO2
+    id: backlight_pwm
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    id: backlight
+    name: Display
+    # The firmware controls the brightness, from outside only "Display aufwecken"
+    internal: true
+    restore_mode: ALWAYS_ON
+    default_transition_length: 300ms
+
+number:
+  - platform: template
+    name: Countdown
+    id: countdown_s
+    icon: mdi:timer-outline
+    unit_of_measurement: s
+    min_value: 5
+    max_value: 120
+    step: 1
+    initial_value: 25
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - component.update: lcd
+  - platform: template
+    name: Vibrationsschwelle
+    id: vibration_threshold
+    icon: mdi:vibrate
+    entity_category: config
+    unit_of_measurement: g
+    min_value: 0.002
+    max_value: 0.5
+    step: 0.001
+    initial_value: 0.05
+    optimistic: true
+    restore_value: true
+    mode: box
+  - platform: template
+    name: Helligkeit normal
+    id: brightness_normal
+    icon: mdi:brightness-7
+    entity_category: config
+    unit_of_measurement: "%"
+    min_value: 1
+    max_value: 100
+    step: 1
+    initial_value: 100
+    optimistic: true
+    restore_value: true
+    mode: slider
+    on_value:
+      - if:
+          condition:
+            lambda: 'return id(is_bright) && !id(standby).state;'
+          then:
+            - script.execute: display_bright
+  - platform: template
+    name: Helligkeit gedimmt
+    id: brightness_dim
+    icon: mdi:brightness-5
+    entity_category: config
+    unit_of_measurement: "%"
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 20
+    optimistic: true
+    restore_value: true
+    mode: slider
+    on_value:
+      - if:
+          condition:
+            lambda: 'return !id(is_bright) && !id(standby).state;'
+          then:
+            - script.execute: display_dim
+
+switch:
+  # While the coffee machine is off: display off, touch and vibration ignored
+  - platform: template
+    name: Standby
+    id: standby
+    icon: mdi:power-sleep
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - script.execute: reset_display
+      - script.stop: keep_awake
+      - lambda: 'id(is_bright) = false;'
+      - light.turn_off: backlight
+    turn_off_action:
+      - script.execute: display_dim
+
+  # Off: vibration starts no countdown, only touch and Home Assistant do
+  - platform: template
+    name: Vibrationsautomatik
+    id: auto_start
+    icon: mdi:vibrate
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+
+  # Off: the vibration threshold stays as set by hand
+  - platform: template
+    name: Schwelle lernen
+    id: auto_threshold
+    icon: mdi:brain
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - script.execute: update_threshold
+
+interval:
+  - interval: 10s
+    then:
+      - script.execute: update_threshold
+
+button:
+  - platform: template
+    name: Gelerntes zurücksetzen
+    icon: mdi:restore
+    entity_category: config
+    on_press:
+      - lambda: |-
+          id(noise_level) = 0;
+          id(pump_level) = 0;
+      - number.set: {id: vibration_threshold, value: 0.05}
+  - platform: template
+    name: Shots zurücksetzen
+    icon: mdi:counter
+    entity_category: config
+    on_press:
+      - lambda: 'id(shot_count) = 0;'
+      - component.update: shots
+  - platform: template
+    name: Display abdunkeln
+    icon: mdi:monitor-off
+    on_press:
+      - if:
+          condition:
+            switch.is_off: standby
+          then:
+            - script.stop: keep_awake
+            - script.execute: display_dim
+  - platform: template
+    name: Display aufwecken
+    icon: mdi:monitor-eye
+    on_press:
+      - if:
+          condition:
+            switch.is_off: standby
+          then:
+            - script.execute: keep_awake
+  - platform: template
+    name: Countdown starten
+    icon: mdi:play
+    on_press:
+      - script.execute: start_countdown
+  - platform: template
+    name: Countdown stoppen
+    icon: mdi:stop
+    # Like a tap: back to the idle screen, display stays bright for 30 s
+    on_press:
+      - script.execute: reset_display
+      - if:
+          condition:
+            switch.is_off: standby
+          then:
+            - script.execute: keep_awake
+
+script:
+  - id: start_countdown
+    mode: restart
+    then:
+      - script.stop: finish_countdown
+      - script.stop: keep_awake
+      - lambda: |-
+          id(phase) = 1;
+          // The pump has been running since the 8 windows began
+          id(start_ms) = millis() - (id(vibration).state ? 800 : 0);
+          id(shot_sum) = 0;
+          id(shot_n) = 0;
+      - script.execute: display_bright
+      # Safety net in case the vibration never ends
+      - delay: 5min
+      - if:
+          condition:
+            lambda: 'return id(phase) == 1;'
+          then:
+            - script.execute: finish_countdown
+
+  - id: finish_countdown
+    mode: restart
+    then:
+      # The pump has been off since the 8 quiet windows began
+      - lambda: |-
+          id(phase) = 2;
+          id(stop_ms) = millis() - (id(vibration).state ? 0 : 800);
+          id(shot_count)++;
+          // Learn from full shots only, each shot weighs 30 % in the pump level
+          if (id(stop_ms) - id(start_ms) >= 5000 && id(shot_n) > 0) {
+            float level = id(shot_sum) / id(shot_n);
+            id(pump_level) = id(pump_level) == 0 ? level : id(pump_level) * 0.7f + level * 0.3f;
+          }
+      - script.execute: update_threshold
+      - component.update: shots
+      - component.update: lcd
+      # Bright for 30 s from the end of the shot
+      - script.execute: keep_awake
+      - delay: 3s
+      - lambda: 'id(phase) = 0;'
+      - component.update: lcd
+
+  # Brightness from "Helligkeit normal" and "Helligkeit gedimmt", 0 % is off
+  - id: display_bright
+    then:
+      - lambda: 'id(is_bright) = true;'
+      - light.turn_on:
+          id: backlight
+          brightness: !lambda 'return id(brightness_normal).state / 100.0f;'
+
+  - id: display_dim
+    then:
+      - lambda: 'id(is_bright) = false;'
+      - if:
+          condition:
+            lambda: 'return id(brightness_dim).state > 0;'
+          then:
+            - light.turn_on:
+                id: backlight
+                brightness: !lambda 'return id(brightness_dim).state / 100.0f;'
+          else:
+            - light.turn_off: backlight
+
+  # Display bright for 30 s, then dim unless a shot is running
+  - id: keep_awake
+    mode: restart
+    then:
+      - script.execute: display_bright
+      - delay: 30s
+      - if:
+          condition:
+            lambda: 'return id(phase) == 0;'
+          then:
+            - script.execute: display_dim
+
+  - id: update_threshold
+    then:
+      - lambda: |-
+          // Not during a shot, it would shift the end
+          if (!id(auto_threshold).state || id(phase) == 1 || id(noise_level) <= 0)
+            return;
+          float noise = id(noise_level);
+          float current = id(vibration_threshold).state;
+          // Without a learned pump level the threshold stays, but is lifted above the noise
+          float t = id(pump_level) > 0 ? 0.4f * id(pump_level) : current;
+          t = std::max(t, 4 * noise);
+          if (id(pump_level) > 0)
+            t = std::min(t, 0.6f * id(pump_level));
+          t = roundf(clamp(t, 0.002f, 0.5f) * 1000) / 1000;
+          if (std::isnan(current) || fabsf(t - current) > current * 0.05f) {
+            ESP_LOGI("vibration", "Threshold %.3f g (noise %.4f g, pump %.3f g)", t, noise, id(pump_level));
+            auto call = id(vibration_threshold).make_call();
+            call.set_value(t);
+            call.perform();
+          }
+
+  # Back to the idle screen, brightness unchanged
+  - id: reset_display
+    then:
+      - script.stop: start_countdown
+      - script.stop: finish_countdown
+      - lambda: 'id(phase) = 0;'
+      - component.update: lcd
+
+  # False detection: dim right away
+  - id: stop_countdown
+    then:
+      - script.execute: reset_display
+      - script.stop: keep_awake
+      - if:
+          condition:
+            switch.is_off: standby
+          then:
+            - script.execute: display_dim
+
+touchscreen:
+  - platform: cst816
+    interrupt_pin: GPIO5
+    reset_pin: GPIO13
+    # The CST816S sleeps without touch and often doesn't answer at boot
+    skip_probe: true
+    # Doesn't follow the display rotation by itself, matches rotation: 90
+    transform:
+      swap_xy: true
+      mirror_x: false
+      mirror_y: true
+    on_touch:
+      - if:
+          condition:
+            switch.is_off: standby
+          then:
+            - lambda: 'id(last_touch_ms) = millis();'
+            # When dimmed a touch only wakes, input works on the bright display only
+            - if:
+                condition:
+                  lambda: 'return id(is_bright);'
+                then:
+                  - if:
+                      condition:
+                        lambda: 'return id(phase) != 0;'
+                      then:
+                        - script.execute: reset_display
+                      else:
+                        - if:
+                            condition:
+                              lambda: 'return touch.y < 120;'
+                            then:
+                              - number.increment: {id: countdown_s, cycle: false}
+                            else:
+                              - number.decrement: {id: countdown_s, cycle: false}
+            - script.execute: keep_awake
+
+font:
+  - file: "gfonts://Roboto@500"
+    id: font_big
+    size: 100
+    glyphs: "+0123456789"
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: 26
+
+display:
+  - platform: mipi_spi
+    id: lcd
+    model: GC9A01A
+    cs_pin: GPIO9
+    dc_pin: GPIO8
+    reset_pin: GPIO14
+    # USB cable exits to the right
+    rotation: 90
+    invert_colors: true
+    data_rate: 40MHz
+    update_interval: 200ms
+    lambda: |-
+      const int cx = 120, cy = 120;
+      // Running sky blue, overtime green, after the shot muted blue. The ring
+      // background is the darkened running color.
+      const Color accent(0x00, 0xAA, 0xFF);
+      const Color done(0x3C, 0xC8, 0x5A);
+      const Color paused(0x00, 0x66, 0x99);
+      const Color dim(0x00, 0x2A, 0x40);
+      const float total = id(countdown_s).state;
+
+      // Progress ring at the edge, frac = remaining share. The arc is made of
+      // filled segments of two triangles each.
+      const int r1 = 98, r2 = 119;
+      auto ring = [&](float frac, Color on) {
+        it.filled_ring(cx, cy, r2, r1, dim);
+        const float end = frac * 360.0f;
+        for (float a = 0; a < end; a += 3.0f) {
+          float a0 = (a - 90) * M_PI / 180.0f;
+          float a1 = (std::min(a + 3.0f, end) - 90) * M_PI / 180.0f;
+          int ix0 = cx + r1 * cosf(a0), iy0 = cy + r1 * sinf(a0);
+          int ox0 = cx + r2 * cosf(a0), oy0 = cy + r2 * sinf(a0);
+          int ix1 = cx + r1 * cosf(a1), iy1 = cy + r1 * sinf(a1);
+          int ox1 = cx + r2 * cosf(a1), oy1 = cy + r2 * sinf(a1);
+          it.filled_triangle(ix0, iy0, ox0, oy0, ox1, oy1, on);
+          it.filled_triangle(ix0, iy0, ox1, oy1, ix1, iy1, on);
+        }
+      };
+
+      if (id(phase) != 0) {
+        uint32_t end = id(phase) == 1 ? millis() : id(stop_ms);
+        float elapsed = std::max(0.0f, (end - id(start_ms)) / 1000.0f);
+        float remaining = total - elapsed;
+        if (id(phase) == 2) {
+          // Shot finished: only the shot time in the pause color, no ring
+          it.printf(cx, cy, id(font_big), paused, TextAlign::CENTER, "%d", (int) elapsed);
+          it.print(cx, 190, id(font_small), Color(150, 150, 150), TextAlign::CENTER, "Bezug");
+        } else if (remaining > 0) {
+          ring(remaining / total, accent);
+          it.printf(cx, cy, id(font_big), Color(255, 255, 255), TextAlign::CENTER, "%d", (int) ceilf(remaining));
+        } else {
+          // Overtime
+          ring(1.0f, done);
+          it.printf(cx, cy, id(font_big), done, TextAlign::CENTER, "+%d", (int) (-remaining));
+        }
+      } else {
+        it.print(cx, 45, id(font_small), Color(150, 150, 150), TextAlign::CENTER, "+");
+        it.printf(cx, cy, id(font_big), Color(150, 150, 150), TextAlign::CENTER, "%d", (int) total);
+        it.print(cx, 195, id(font_small), Color(150, 150, 150), TextAlign::CENTER, "-");
+      }
