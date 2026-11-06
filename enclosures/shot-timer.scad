@@ -1,8 +1,8 @@
 // Enclosure for the Waveshare ESP32-S3-Touch-LCD-1.28 (shot-timer.yaml),
 // sticking out sideways on the left of a Quick Mill Orione 03000, display
 // facing forward. Idea from the "Espresso Coffee Shot Timer RP2040" by
-// DaniilKrant on MakerWorld, but clamped instead of magnetic, because the
-// stainless steel housing isn't magnetic.
+// DaniilKrant on MakerWorld, but clamped onto the cup tray rim, with a single
+// magnet in the leg that pulls it against the side wall.
 //
 // Two parts:
 // - stand: display ring, arm, leg and clip in one piece. The clip is a U that
@@ -58,6 +58,11 @@ plug_len = 28;
 cable_w = 4;
 // clear height for threading the plug through the leg, from the front
 plug_h = 8.5;
+// Neodymium disc magnet in the leg, above the cable channel, facing the side
+// wall (diameter, thickness). It sits 0.2 mm below the surface so the leg still
+// lies flat. Glue it in.
+magnet = [6, 2];
+magnet_clr = 0.15;     // clearance on the diameter side
 
 /* [Board] */
 lens_d = 38.51;        // lens = board outline
@@ -121,8 +126,13 @@ rim_pivot = [arm_len, rim_above];
 // wall stays between the groove and the lead-in chamfer
 snap_z = cover_z - cover_lip_h + 0.4;
 ch_bottom = -ch_h / 2 - ch_wall;
+// magnet centre: 2 mm above the cable channel's top wall, centred in depth
+magnet_y = ch_h / 2 + ch_wall + 2 + magnet[0] / 2;
+magnet_z = leg_w / 2;
 
 assert(rim_y - rim_inner > ch_h / 2 + ch_wall, "rim too low for the arm, increase rim_above");
+assert(magnet_y + magnet[0] / 2 + 2 < rim_y - rim_inner, "no room for the magnet below the clip");
+assert(magnet[1] + 0.2 < leg_t - 1.5, "leg too thin for the magnet");
 assert(snap_z + 0.5 < inner_d - ring_lead, "snap groove runs into the lead-in chamfer");
 if (usb_bottom + plug_len > leg_x)
   echo(str("WARNING: plug reaches x = ", usb_bottom + plug_len, ", the leg starts at x = ",
@@ -165,6 +175,18 @@ module cable_slot() {
       [-cable_w / 2, leg_w + 1], [-cable_w / 2, pass_top + (ch_h - cable_w) / 2],
       [-ch_h / 2, pass_top],
     ]);
+}
+
+// Pocket for the magnet, opening on the wall side of the leg. A teardrop
+// pointing backwards (up in print), so the hole needs no support.
+module magnet_pocket() {
+  r = magnet[0] / 2 + magnet_clr;
+  depth = magnet[1] + 0.2;
+  side() translate([arm_len - depth, magnet_y, magnet_z]) rotate([0, 90, 0])
+    linear_extrude(depth + 1) hull() {
+      circle(r = r);
+      translate([-r * sqrt(2), 0]) square(0.01, center = true);
+    }
 }
 
 // rotates the U around its top edge at the wall, see rim_tilt
@@ -239,6 +261,7 @@ module stand() {
     translate([0, 0, -0.01]) cylinder(d1 = view_d + 2 * lip, d2 = view_d, h = lip + 0.02);
     channel();
     cable_slot();
+    magnet_pocket();
     // groove for the cover's snap bead
     if (snap > 0)
       translate([0, 0, snap_z - 0.5]) linear_extrude(1) cavity2d(snap + 0.15);
